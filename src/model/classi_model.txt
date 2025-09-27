@@ -1,0 +1,4627 @@
+package model.managers;
+
+import static constants.Constants.*;
+
+import model.states.GameStates;
+import model.states.StateManager;
+import model.users.SavingsManager;
+import model.users.User;
+import model.users.UserDatas;
+import model.users.UserDatas.UserBuilder;
+import model.utils.DirectionX;
+import model.utils.DirectionY;
+
+/**
+ * Gestisce la logica e lo stato della schermata di creazione/visualizzazione
+ * delle statistiche di fine partita. Non è più un Singleton e riceve
+ * tutte le sue dipendenze tramite il costruttore.
+ */
+public class StatisticsManager {
+    
+    // MODIFICA: Dipendenze iniettate dal GameModel
+    private final PlayersManager playersManager;
+    private final UserDatas userDatas;
+    private final LevelManager levelManager;
+    private final StateManager stateManager;
+    private final SavingsManager savingsManager;
+
+    // Campi di stato interni
+    private CurrentPlayer currentPlayer = CurrentPlayer.P1;
+    private Phases currentPhase = Phases.INTRO;
+    private UserBuilder userBuilder;
+    private User createdUser;
+    
+    private boolean endPhase;
+    
+    // Campi per la fase di selezione del nome
+    private final StringBuilder nameBuilder = new StringBuilder();
+    private Character typedChar;
+    private int lastCharIndex = -1;
+    
+    // Campi per la fase di selezione dell'avatar
+    private final AvatarButton[] buttonsArray = new AvatarButton[AVATARS_NUM];
+    private int avatarIndex;
+    private boolean moveLeft, moveRight, moveUp, moveDown;
+
+    /**
+     * MODIFICA: Il costruttore ora è pubblico e accetta tutte le dipendenze necessarie.
+     */
+    public StatisticsManager(PlayersManager playersManager, UserDatas userDatas, 
+                             LevelManager levelManager, StateManager stateManager, SavingsManager savingsManager) {
+        this.playersManager = playersManager;
+        this.userDatas = userDatas;
+        this.levelManager = levelManager;
+        this.stateManager = stateManager;
+        this.savingsManager = savingsManager;
+        
+        setButtons();
+        this.savingsManager.load();
+    }
+    
+    private void setButtons() {
+        int x = SCREENWIDTH / 5;
+        int y = SCREENHEIGHT / 2;
+        for (int i = 0; i < AVATARS_NUM; i++) {
+            if (i == 4) y += TILESIZE * 4;
+            buttonsArray[i] = new AvatarButton(i, x - TILESIZE + x * (i % 4), y);
+        }
+    }
+    
+    public void update() {
+        if (endPhase) {
+            finalizePhase();
+            endPhase = false;
+            return;
+        }
+        
+        switch (currentPhase) {
+            case NAME_SELECTION:
+                if (typedChar != null) {
+                    if (nameBuilder.length() < 9) {
+                        nameBuilder.append(typedChar);
+                        lastCharIndex++;
+                    }
+                    typedChar = null;
+                }
+                break; // MODIFICA: Aggiunto il 'break' mancante per evitare il fall-through
+
+            case AVATAR_SELECTION:
+                if (moveLeft && avatarIndex > 0) { avatarIndex--; moveLeft = false; } 
+                else if (moveRight && avatarIndex < 7) { avatarIndex++; moveRight = false; } 
+                else if (moveUp && avatarIndex > 3) { avatarIndex -= 4; moveUp = false; } 
+                else if (moveDown && avatarIndex < 4) { avatarIndex += 4; moveDown = false; }
+                break;
+                
+            default:
+                break;
+        }
+    }
+
+    public void finalizePhase() {
+        switch (currentPhase) {
+            case INTRO:
+                userBuilder = userDatas.new UserBuilder();
+                userBuilder.setScore(setUserScore());
+                nextPhase();
+                break;
+            case NAME_SELECTION:
+                userBuilder.setName(nameBuilder.toString());
+                nextPhase();
+                break;
+            case AVATAR_SELECTION:
+                userBuilder.setAvatarIndex(avatarIndex);
+                createdUser = userBuilder.createUser();
+                savingsManager.save();
+                nextPhase();
+                break;
+            case FINALIZATION:
+            case STATS_DISPLAY:
+                nextPhase();
+                break;
+        }
+    }
+    
+    private void nextPhase() {
+        switch(currentPhase) {
+            case INTRO:
+                currentPhase = Phases.NAME_SELECTION;
+                break;
+            case NAME_SELECTION:
+                currentPhase = Phases.AVATAR_SELECTION;
+                break;
+            case AVATAR_SELECTION:
+                currentPhase = Phases.FINALIZATION;
+                break;
+            case FINALIZATION:
+                if (playersManager.hasTwoPlayers() && currentPlayer == CurrentPlayer.P1) {
+                    currentPlayer = CurrentPlayer.P2;
+                    resetUserStats();
+                } else {
+                    currentPhase = Phases.STATS_DISPLAY;
+                }
+                break;
+            case STATS_DISPLAY:
+                // MODIFICA: Usa le istanze iniettate
+                levelManager.resetGame();
+                stateManager.setState(GameStates.INTRO);
+                break;
+        }
+        
+        // MODIFICA: La chiamata diretta alla View è stata rimossa.
+    }
+    
+    private void resetUserStats() {
+        currentPhase = Phases.INTRO;
+        nameBuilder.setLength(0);
+        avatarIndex = 0;
+        lastCharIndex = -1;
+        createdUser = null;
+    }
+
+    private int setUserScore() {
+        if (currentPlayer == CurrentPlayer.P1 && playersManager.getP1() != null) {
+            return playersManager.getP1().getScore();
+        } else if (currentPlayer == CurrentPlayer.P2 && playersManager.getP2() != null) {
+            return playersManager.getP2().getScore();
+        }
+        return 0;
+    }
+    
+    // --- Setters e gestione degli inputs ---
+    public void moveSelection(DirectionX direction) { if(direction == DirectionX.LEFT) moveLeft=true; else moveRight=true; }
+    public void moveSelection(DirectionY direction) { if(direction == DirectionY.UP) moveUp=true; else moveDown=true; }
+    public void setTypedChar(char c) { typedChar = c; }
+    public void deleteChar() {
+        if (lastCharIndex >= 0) {
+            nameBuilder.deleteCharAt(lastCharIndex);
+            lastCharIndex--;
+        }
+    }
+    public void endPhase() { endPhase = true; }
+    
+    // --- Getters per la View (permettono alla View di leggere lo stato) ---
+    public AvatarButton[] getAvatarButtons() { return buttonsArray; }
+    public AvatarButton getSelectedButton() { return buttonsArray[avatarIndex]; }
+    public CurrentPlayer getCurrentPlayer() { return currentPlayer; }
+    public Phases getCreationPhase() { return currentPhase; }
+    public String getTypedString() { return nameBuilder.toString(); }
+    public User getCreatedUser() { return createdUser; }
+    
+    // --- Classi e Enum interni ---
+    public enum Phases { INTRO, AVATAR_SELECTION, NAME_SELECTION, FINALIZATION, STATS_DISPLAY; }
+    public enum CurrentPlayer { P1, P2; }
+    
+    public class AvatarButton {
+        private final int avatarIndex;
+        private final int x, y;
+        
+        private AvatarButton(int avatarIndex, int x, int y) {
+            this.avatarIndex = avatarIndex;
+            this.x = x;
+            this.y = y;
+        }
+        
+        public int getIndex() { return avatarIndex; }
+        public int getX() { return x; }
+        public int getY() { return y; }
+    }
+}-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.bubbles.Bubble;
+import model.bubbles.PlayerBubble;
+import model.bubbles.SpecialBubble;
+import model.bubbles.SpecialBubbleType;
+import model.entities.players.Player;
+import model.utils.DirectionX;
+
+import java.util.List;
+import java.util.Random;
+
+import static constants.Constants.*;
+
+public class BubblesManager extends BaseManager<Bubble> {
+
+    private final TilesManager tilesManager;
+    private final MinorEventsManager minorEventsManager;
+    private final CollisionManager collisionManager;
+    private final EnemiesManager enemiesManager;
+    private final ProjectilesManager projectilesManager;
+
+    private final Random random = new Random();
+    private boolean factoryBlocked;
+    private int specialBubblesSpawnTC = 10 * FPS;
+    private SpecialBubbleType nextSpecialBubbleType;
+
+    public BubblesManager(GameModel gameModel,
+                          TilesManager tilesManager,
+                          MinorEventsManager minorEventsManager,
+                          CollisionManager collisionManager,
+                          EnemiesManager enemiesManager,
+                          ProjectilesManager projectilesManager) {
+        super(gameModel);
+        this.tilesManager = tilesManager;
+        this.minorEventsManager = minorEventsManager;
+        this.collisionManager = collisionManager;
+        this.enemiesManager = enemiesManager;
+        this.projectilesManager = projectilesManager;
+    }
+
+    public void createPlayerBubble(Player player) {
+        DirectionX direction = player.getDirection();
+        int shift = (direction == DirectionX.LEFT) ? -5 : 5;
+
+        PlayerBubble bubble = new PlayerBubble(
+                player,
+                player.getX() + shift,
+                player.getY() - 5,
+                direction,
+                tilesManager,
+                minorEventsManager,
+                collisionManager,
+                enemiesManager
+        );
+
+        add(bubble); // 🔥 notifica automatica entityAdded
+    }
+
+    public void createSpecialBubble() {
+        if (factoryBlocked || nextSpecialBubbleType == null) return;
+
+        int col = random.nextInt(2, MAXSCREENCOL - 2);
+        SpecialBubble bubble = new SpecialBubble(
+                col * TILESIZE,
+                nextSpecialBubbleType,
+                tilesManager,
+                minorEventsManager,
+                collisionManager,
+                projectilesManager
+        );
+
+        add(bubble); // 🔥 notifica automatica entityAdded
+    }
+
+    @Override
+    public void update() {
+        // Aggiorna tutte le bolle
+        super.update();
+
+        // Spawn automatico di bolle speciali
+        if (!factoryBlocked) {
+            specialBubblesSpawnTC--;
+            if (specialBubblesSpawnTC <= 0) {
+                createSpecialBubble();
+                specialBubblesSpawnTC = random.nextInt(10 * FPS, 30 * FPS);
+            }
+        }
+        
+        for (Bubble bubble : entities) {
+            if (bubble.isReadyToRemove()) {
+                remove(bubble); 
+            }
+        }
+    }
+
+    @Override
+    public void reset() {
+        super.reset(); // 🔥 notifica già tutte le rimozioni
+    }
+
+    public void blockFactory() { factoryBlocked = true; }
+    public void unlockFactory() { factoryBlocked = false; }
+    public void setNextSpecialBubble(SpecialBubbleType type) { this.nextSpecialBubbleType = type; }
+
+    public List<Bubble> getBubbles() { return getEntities(); }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import model.GameModel;
+import model.entities.players.Player;
+
+public class PlayersManager extends BaseManager<Player> {
+
+    private BubblesManager bubblesManager;
+    private final MinorEventsManager minorEventsManager;
+    private final LevelManager levelManager;
+    private final TilesManager tilesManager;
+    private final AudioManager audioManager;
+
+    public PlayersManager(GameModel gameModel, BubblesManager bubblesManager, MinorEventsManager minorEventsManager,
+                          LevelManager levelManager, TilesManager tilesManager, AudioManager audioManager) {
+        super(gameModel);
+        this.bubblesManager = bubblesManager;
+        this.minorEventsManager = minorEventsManager;
+        this.levelManager = levelManager;
+        this.tilesManager = tilesManager;
+        this.audioManager = audioManager;
+    }
+    
+    public void setBubblesManager(BubblesManager bubblesManager) {
+    	this.bubblesManager = bubblesManager;
+    }
+
+
+    public void addPlayer(String name) {
+        if (entities.size() < 2) {
+            Player player = new Player(name, bubblesManager, minorEventsManager, levelManager, tilesManager, audioManager);
+            super.add(player);
+        }
+    }
+
+    public Player getP1() {
+        return entities.isEmpty() ? null : entities.get(0);
+    }
+
+    public Player getP2() {
+        return entities.size() < 2 ? null : entities.get(1);
+    }
+
+    @Override
+    public void update() {
+    	super.update();
+    }
+
+    public List<Player> getActivePlayers() {
+        return entities.stream()
+                .filter(Player::hasLives)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void reset() {
+        super.reset(); // 🔥 notifica anche le rimozioni
+        addPlayer("bub");
+    }
+
+    // --- Metodi delegati ---
+    public void takePosition() {
+        entities.forEach(Player::takePosition);
+    }
+
+    public void resetPowerUps() {
+        entities.forEach(Player::resetPowerUps);
+    }
+
+    public boolean hasTwoPlayers() {
+        return entities.size() > 1;
+    }
+
+    public boolean playersAlive() {
+        return entities.stream().anyMatch(Player::hasLives);
+    }
+
+    public boolean areDying() {
+        return entities.stream().filter(Player::hasLives).allMatch(Player::isDying);
+    }
+
+    public boolean inSpawnPosition() {
+        return entities.stream().filter(Player::hasLives).allMatch(Player::inSpawnPosition);
+    }
+    
+    public boolean isPositioningComplete() {
+        return entities.stream().noneMatch(e -> e.isPositioning());
+    }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import static constants.Constants.*;
+
+import java.awt.Point;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import model.GameModel;
+import model.entities.PowerUpType;
+import model.entities.players.Player;
+import model.items.Food;
+import model.items.FoodRandomizer;
+import model.items.Item;
+import model.items.SpecialItem;
+import model.managers.BaseManager;
+
+public class ItemsManager extends BaseManager<Item> {
+
+    private final PlayersManager playersManager;
+    private final TilesManager tilesManager;
+    private final FoodRandomizer randomizer;
+    private final Random random;
+
+    private boolean factoryBlocked = false;
+    private int itemsSpawnTC = 15 * FPS;
+    private int conditionCheckTC = 0;
+
+    public ItemsManager(GameModel gameModel, PlayersManager playersManager, TilesManager tilesManager) {
+    	super(gameModel);
+        this.playersManager = playersManager;
+        this.tilesManager = tilesManager;
+        this.entities = new ArrayList<>();
+        this.randomizer = new FoodRandomizer(tilesManager.getMap());
+        this.random = new Random();
+    }
+
+    // --- CREAZIONE OGGETTI ---
+    public void foodFactory(int x, int y) {
+        String itemName = randomizer.randomizeItem();
+        Item item = switch(itemName) {
+            case "GreenPepper"   -> new Food(x * TILESIZE, y * TILESIZE, 10, tilesManager);
+            case "RedTurnip"     -> new Food(x * TILESIZE, y * TILESIZE, 50, tilesManager);
+            case "Cucumber"      -> new Food(x * TILESIZE, y * TILESIZE, 100, tilesManager);
+            case "Corn"          -> new Food(x * TILESIZE, y * TILESIZE, 200, tilesManager);
+            case "Persimmon"     -> new Food(x * TILESIZE, y * TILESIZE, 300, tilesManager);
+            case "Banana"        -> new Food(x * TILESIZE, y * TILESIZE, 500, tilesManager);
+            case "Peach"         -> new Food(x * TILESIZE, y * TILESIZE, 400, tilesManager);
+            case "FrenchFries"   -> new Food(x * TILESIZE, y * TILESIZE, 1000, tilesManager);
+            case "Crystal"       -> new Food(x * TILESIZE, y * TILESIZE, 8000, tilesManager);
+            case "BigWatermelon" -> new Food(x * TILESIZE, y * TILESIZE - TILESIZE, 4 * TILESIZE, 16000, tilesManager);
+            default -> null;
+        };
+        if (item != null) add(item); // 🔥 notifica automatica
+    }
+
+    public void specialItemsFactory(PowerUpType itemType) { // MODIFICATO: da String a PowerUpType
+        Point coords = randomizer.randomizeCoordinates();
+        SpecialItem item = new SpecialItem(itemType, coords.x * TILESIZE, coords.y * TILESIZE, tilesManager);
+        add(item);
+    }
+
+    @Override
+    public void update() {
+        // Aggiorna tutti gli item
+        super.update();
+
+        // Spawn cibo casuale
+        if (!factoryBlocked) {
+            itemsSpawnTC--;
+            if (itemsSpawnTC <= 0) {
+                Point coords = randomizer.randomizeCoordinates();
+                foodFactory(coords.x, coords.y);
+                itemsSpawnTC = 15 * FPS;
+            }
+        }
+
+        // Controllo condizioni per drop special items
+        conditionCheckTC++;
+        if (conditionCheckTC > 10) {
+            Player p1 = playersManager.getP1();
+            Player p2 = playersManager.hasTwoPlayers() ? playersManager.getP2() : null;
+            if (p1 != null) checkItemsConditions(p1);
+            if (p2 != null) checkItemsConditions(p2);
+            conditionCheckTC = 0;
+        }
+
+        for (Item item : entities) {
+            if (item.isReadyToRemove()) {
+                remove(item); 
+            }
+        }
+    }
+
+    private void checkItemsConditions(Player p) {
+        if (p == null) return;
+
+        // --- DROPPARE CANDIES ---
+        if (p.getBubblesCounter() > 35) {
+            int rand = random.nextInt(3);
+            switch(rand) {
+                case 0 -> specialItemsFactory(PowerUpType.PINK_CANDY);
+                case 1 -> specialItemsFactory(PowerUpType.BLUE_CANDY);
+                case 2 -> specialItemsFactory(PowerUpType.YELLOW_CANDY);
+            }
+            p.resetBubblesCounter();
+        }
+
+        // --- DROPPARE SCARPE ---
+        if (p.getStepCounter() > SCREENWIDTH * 10) {
+            specialItemsFactory(PowerUpType.SHOES);
+            p.resetStepCounter();
+        }
+
+        // --- DROPPARE CLOCK / DYNAMITE ---
+        if (p.getSpecialBubblesCounter() > 12) {
+            if (random.nextInt(2) == 0) {
+                specialItemsFactory(PowerUpType.CLOCK);
+            } else {
+                specialItemsFactory(PowerUpType.DYNAMITE);
+            }
+            p.resetSpecialBubblesCounter();
+        }
+
+        // --- DROPPARE RINGS ---
+        if (p.getCandyCounter(PowerUpType.BLUE_CANDY) > 2) {
+            specialItemsFactory(PowerUpType.CRYSTAL_RING);
+            p.resetCandyCounter(PowerUpType.BLUE_CANDY);
+        } else if (p.getCandyCounter(PowerUpType.YELLOW_CANDY) > 2) {
+            specialItemsFactory(PowerUpType.AMETHYST_RING);
+            p.resetCandyCounter(PowerUpType.YELLOW_CANDY);
+        } else if (p.getCandyCounter(PowerUpType.PINK_CANDY) > 2) {
+            specialItemsFactory(PowerUpType.RUBY_RING);
+            p.resetCandyCounter(PowerUpType.PINK_CANDY);
+        }
+
+    }
+
+    // --- BLOCK / UNBLOCK FACTORY ---
+    public void blockFactory() { factoryBlocked = true; }
+    public void unlockFactory() { factoryBlocked = false; }
+
+    @Override
+    public void reset() {
+        super.reset(); // 🔥 notifica automatica clearing
+    }
+
+    public List<Item> getItems() { return getEntities(); }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.ai.EnemyAIService;
+import model.entities.enemies.*;
+import model.entities.players.Player;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
+public class EnemiesManager extends BaseManager<Enemy> {
+
+    private final PlayersManager playersManager;
+    private final LevelManager levelManager;
+    private final ItemsManager itemsManager;
+    private final TilesManager tilesManager;
+    private final ProjectilesManager projectilesManager;
+    private final EnemyAIService aiService;
+    private final AudioManager audioManager;
+
+    private final List<Enemy> trappedEnemies;
+    private boolean angry;
+
+    public EnemiesManager(GameModel gameModel,
+                          PlayersManager playersManager,
+                          LevelManager levelManager,
+                          ItemsManager itemsManager,
+                          TilesManager tilesManager,
+                          ProjectilesManager projectilesManager,
+                          EnemyAIService aiService, 
+                          AudioManager audioManager) {
+        super(gameModel);
+        this.playersManager = playersManager;
+        this.levelManager = levelManager;
+        this.itemsManager = itemsManager;
+        this.tilesManager = tilesManager;
+        this.projectilesManager = projectilesManager;
+        this.aiService = aiService;
+        this.audioManager = audioManager;
+        this.trappedEnemies = new ArrayList<>();
+    }
+
+    @Override
+    public void update() {
+        super.update(); 
+
+        // ORA PROCEDI CON LA LOGICA SPECIFICA DI QUESTO MANAGER
+        boolean canEnemiesMove = !playersManager.areDying() 
+        		&& !levelManager.isInitialising()
+        		&& playersManager.isPositioningComplete();
+        
+        // NOTA: Non è più necessario creare una "new ArrayList<>" qui,
+        // perché il BaseManager gestisce già le modifiche in modo sicuro.
+        for (Enemy enemy : entities) { 
+            enemy.canMove(canEnemiesMove);
+            enemy.update();
+        }
+
+        // Anche questo ciclo potrebbe essere ottimizzato, ma per ora lo lasciamo.
+        // La logica importante è la rimozione basata sul flag.
+        for (Enemy enemy : entities) {
+            if (enemy.isReadyToRemove()) {
+                remove(enemy);
+            }
+        }
+    }
+
+    public void createEnemy(String enemyName, int x, int y) {
+        Enemy enemy = switch (enemyName) {
+            case "Zenchan" -> new ZenChan(x, y, tilesManager, playersManager, aiService, audioManager);
+            case "Monsta" -> new Monsta(x, y, tilesManager, audioManager);
+            case "Maita" -> new Maita(x, y, tilesManager, playersManager, projectilesManager, aiService, audioManager);
+            default -> null;
+        };
+
+        if (enemy != null) {
+            add(enemy); 
+        }
+        
+        System.out.println("DEBUG: Creato e aggiunto nemico: " + enemyName);
+    }
+
+    public void exterminate() {
+        new ArrayList<>(entities).forEach(Enemy::die);
+    }
+
+    public void getMad() {
+        if (!angry) {
+            entities.forEach(Enemy::getMad);
+            angry = true;
+        }
+    }
+
+    public void trapEnemy(Enemy enemy) {
+        enemy.trapped();
+        remove(enemy); 
+        trappedEnemies.add(enemy);
+    }
+
+    public List<Enemy> getActiveEnemies() {
+        return new ArrayList<>(entities);
+    }
+
+    @Override
+    public void reset() {
+        super.reset(); 
+        trappedEnemies.clear();
+        angry = false;
+    }
+
+    public boolean noMoreEnemies() {
+        return entities.isEmpty() && trappedEnemies.isEmpty() && !hasPendingAdditions();
+    }
+
+    public void canMove(boolean b) {
+        entities.forEach(enemy -> enemy.canMove(b));
+    }
+
+    public boolean inSpawnPosition() {
+        return entities.stream().allMatch(Enemy::inSpawnPosition);
+    }
+
+    public void takePosition() {
+        entities.forEach(Enemy::takePosition);
+    }
+    
+    public boolean isPositioningComplete() {
+        return entities.stream().noneMatch(e -> e.isPositioning());
+    }
+
+    
+    public void releaseTrappedEnemy(Enemy enemy, int x, int y, boolean wasPopped) {
+        trappedEnemies.remove(enemy);
+
+        if (wasPopped) {
+            enemy.setX(x);
+            enemy.setY(y);
+            enemy.die(); // morirà e verrà gestito in update()
+        } else {
+            enemy.getMad();
+            add(enemy); // 🔥 notifica automaticamente entityAdded
+        }
+    }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import java.util.concurrent.atomic.AtomicInteger; // NUOVO IMPORT
+
+public class ScoreManager {
+	
+	private static final AtomicInteger highestScore = new AtomicInteger(0);
+	
+	private int score;
+	
+	public void resetScore() {
+		score = 0;
+	}
+	
+	public void addScore(int delta) {
+		this.score += delta;
+		
+		// Questo blocco aggiorna il punteggio massimo in modo thread-safe.
+		int currentHighest;
+		do {
+			currentHighest = highestScore.get();
+			if (this.score <= currentHighest) {
+				break; // Il nostro punteggio non è più alto, usciamo.
+			}
+			// Altrimenti, tentiamo di impostare il nostro punteggio come nuovo record.
+			// compareAndSet ha successo solo se il valore non è cambiato nel frattempo.
+		} while (!highestScore.compareAndSet(currentHighest, this.score));
+	}
+	
+	public void subtractScore(int delta) {
+		score -= delta;
+	}
+	
+	public int getScore() {
+		return score;
+	}
+	
+	// --- Metodi per l'highest score  ---
+	
+	public static int getHighestScore() {
+		return highestScore.get();
+	}
+	
+	public static void setHighestScore(int score) {
+		highestScore.set(score);
+	}
+}
+-e 
+--next class--
+
+package model.managers;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.Stack;
+import view.interfaces.DrawableMap;
+import static constants.Constants.*;
+
+
+public class TilesManager implements DrawableMap {
+
+    private final int[][] map = new int[MAXSCREENROW][MAXSCREENCOL];
+    private final Stack<int[]> nextLevelRows = new Stack<>();
+    
+    // Variabili per lo scorrimento
+    private boolean isSliding = false;
+    private int slidedRows = 0;
+    private int yOffset = 0;		
+	
+	private final int SLIDE_SPEED = TILESIZE / 6;
+    private static final int SHADOW_OFFSET = 12;
+
+    public TilesManager() {}
+
+    /**
+     * Carica un livello da file e prepara lo stack per lo scroll animation.
+     * @param levelNumber numero del livello da caricare
+     */
+    public void loadLevel(int levelNumber) {
+        String path = "/maps/level" + levelNumber + ".txt";
+
+        // Pulisce lo stack precedente
+        nextLevelRows.clear();
+
+        InputStream is = getClass().getResourceAsStream(path);
+        if (is == null) {
+            System.err.println("File della mappa non trovato: " + path);
+            return;
+        }
+
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
+            String line;
+            int row = 0;
+
+            while ((line = br.readLine()) != null && row < MAXSCREENROW) {
+                String[] numbers = line.trim().split("\\s+"); // Split robusto su spazi multipli
+                int[] newRowData = new int[MAXSCREENCOL];
+
+                for (int col = 0; col < MAXSCREENCOL && col < numbers.length; col++) {
+                    int tileType = Integer.parseInt(numbers[col]);
+                    map[row][col] = tileType;
+                    newRowData[col] = tileType;
+                }
+
+                nextLevelRows.push(newRowData);
+                row++;
+            }
+
+        } catch (Exception e) {
+            System.err.println("Errore durante il caricamento della mappa: " + path);
+            e.printStackTrace();
+        }
+    }
+    
+    
+    public void update() {
+        if (!isSliding) return;
+
+        // Aggiunge la velocità all'offset
+        yOffset += SLIDE_SPEED;
+
+        // Se l'offset ha superato la dimensione di una tessera, esegui lo scatto di una riga
+        if (yOffset >= TILESIZE) {
+            // CORREZIONE 1: Rende il movimento più fluido
+            yOffset -= TILESIZE;
+
+            // Sposta tutte le righe della mappa di animazione verso il basso
+            for (int i = MAXSCREENROW - 1; i > 0; i--) {
+                map[i] = map[i - 1];
+            }
+            
+            // Prende una nuova riga dallo stack del prossimo livello e la mette in cima
+            if (nextLevelRows != null && !nextLevelRows.isEmpty()) {
+                map[0] = nextLevelRows.pop();
+            } else {
+                // Se lo stack è vuoto, inserisci una riga vuota (per evitare di duplicare l'ultima)
+                map[0] = new int[MAXSCREENCOL];
+            }
+
+            // Incrementa il contatore delle righe fatte scorrere
+            slidedRows++;
+        }
+
+        // CORREZIONE 2: Logica di terminazione
+        // Controlla se abbiamo finito di far scorrere tutte le righe
+        if (slidedRows >= MAXSCREENROW) {
+            isSliding = false;
+            slidedRows = 0;
+            yOffset = 0;
+        }
+    }
+    
+    public boolean isSlidingDone() {
+    	return !isSliding;
+    }
+    
+    public void slideToNextLevel() {
+    	isSliding = true;
+    }
+
+    // --- DrawableMap interface ---
+
+    @Override
+    public int[][] getMap() {
+        return map;
+    }
+    
+    @Override
+    public int getOffset() {
+    	return yOffset;
+    }
+
+}
+-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.bubbles.SpecialBubble;
+import model.entities.Entity;
+import model.projectiles.*;
+import model.utils.DirectionX;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProjectilesManager extends BaseManager<Projectile> {
+
+
+    private final int[][] map;
+
+    public ProjectilesManager(GameModel gameModel, TilesManager tilesManager) {
+    	super(gameModel);
+        this.entities = new ArrayList<>();
+        map = tilesManager.getMap();
+    }
+
+    @Override
+    public void update() {
+        super.update(); // Aggiorna tutti i proiettili
+
+        for (Projectile projectile : entities) {
+            if (projectile.isReadyToRemove()) {
+                remove(projectile); 
+            }
+        }
+    }
+
+    // --- SPAWN PROIETTILI DA NEMICI ---
+    public void spawnProjectileFromEnemy(Entity enemy) {
+        if (enemy == null) return;
+
+        DirectionX direction = enemy.getDirection();
+        int xShift = (direction == DirectionX.LEFT) ? -5 : 5;
+
+        Projectile projectile = null;
+
+        switch (enemy.getName().toLowerCase()) {
+            case "maita":
+                projectile = new MaitaProjectile(enemy.getX() + xShift, enemy.getY() - 5, direction, map);
+                break;
+        }
+
+        if (projectile != null) add(projectile); // 🔥 notifica automatica
+    }
+
+    // --- SPAWN PROIETTILI DA BUBBLES ---
+    public void spawnProjectileFromBubble(SpecialBubble bubble) {
+        if (bubble == null) return;
+
+        Projectile projectile = null;
+        String type = bubble.getType().toString();
+
+        switch (type) {
+            case "FIRE" -> projectile = new Fire(bubble.getX(), bubble.getY(), map, this);
+            case "THUNDER" -> projectile = new Thunder(bubble.getX(), bubble.getY(), map);
+        }
+
+        if (projectile != null) add(projectile); // 🔥 notifica automatica
+    }
+
+    // --- SPAWN FIRE CHILD ---
+    public void spawnFireChild(int x, int y, Fire root, DirectionX direction, int charges) {
+        if (root == null || direction == null) return;
+        FireChild fireChild = new FireChild(x, y, root, direction, charges, map, this);
+        add(fireChild); // 🔥 notifica automatica
+    }
+
+    // --- RESET ---
+    @Override
+    public void reset() {
+        super.reset(); // 🔥 notifica automatica clearing
+    }
+
+    // --- GETTERS ---
+    public List<Projectile> getProjectiles() {
+        return getEntities();
+    }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.utils.MinorEvent;
+
+/**
+ * MODIFICATO: Ora è una semplice classe di utility.
+ * Non estende più BaseManager perché non gestisce una lista di entità.
+ * Il suo unico scopo è creare e notificare eventi istantanei.
+ */
+public class MinorEventsManager {
+
+    private GameModel gameModel; // Mantiene un riferimento al Model per inviare notifiche
+
+    public MinorEventsManager(GameModel gameModel) {
+        this.gameModel = gameModel;
+    }
+
+    /**
+     * Permette di iniettare il GameModel dopo la costruzione,
+     * come richiesto dal GameModelBuilder.
+     */
+    public void setGameModel(GameModel gameModel) {
+        this.gameModel = gameModel;
+    }
+
+    /**
+     * Crea un evento di punteggio e lo notifica immediatamente.
+     */
+    public void createScoreEvent(int x, int y, String type, String user, int scoredPoints) {
+        if (gameModel != null) {
+            gameModel.notifyMinorEvent(new MinorEvent(x, y, type, user, scoredPoints));
+        }
+    }
+
+    /**
+     * Crea un evento generico e lo notifica immediatamente.
+     */
+    public void createEvent(int x, int y, String type) {
+        if (gameModel != null) {
+            gameModel.notifyMinorEvent(new MinorEvent(x, y, type, null, -1));
+        }
+    }
+    
+}-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.bubbles.SpecialBubbleType;
+import model.states.GameStates;
+import model.states.StateManager;
+import static constants.Constants.*;
+
+public class LevelManager {
+	
+	private GameModel gameModel;
+
+    private ItemsManager items;
+    private EnemiesManager enemies;
+    private PlayersManager players;
+    private BubblesManager bubbles;
+
+    private final TilesManager tiles;
+    private final MinorEventsManager minorEvents;
+    private final ProjectilesManager projectiles;
+    private final StateManager state;
+
+    private boolean initialisingLevel = false;
+    private boolean angryEnemies;
+    private int angryEnemiesTC = 30 * FPS;
+
+    private int currentLevel = 1;
+    private final int LEVELMAX = 8;
+
+    private int endLevelTC;
+    private final long TICKS_TO_END = 300;
+
+    private boolean clock, dynamite;
+    private int clockTC, dynamiteTC;
+
+    public LevelManager(GameModel gameModel, ItemsManager items, EnemiesManager enemies, TilesManager tiles,
+                        PlayersManager players, BubblesManager bubbles, MinorEventsManager minorEvents,
+                        ProjectilesManager projectiles, StateManager state) {
+    	this.gameModel = gameModel;
+        this.items = items;
+        this.enemies = enemies;
+        this.tiles = tiles;
+        this.players = players;
+        this.bubbles = bubbles;
+        this.minorEvents = minorEvents;
+        this.projectiles = projectiles;
+        this.state = state;
+    }
+
+    // --- Dependency injection setters ---
+    public void setEnemiesManager(EnemiesManager enemies) { this.enemies = enemies; }
+    public void setItemsManager(ItemsManager items) { this.items = items; }
+    public void setPlayersManager(PlayersManager players) { this.players = players; }
+    public void setBubblesManager(BubblesManager bubbles) { this.bubbles = bubbles; }
+    public void setGameModel(GameModel gameModel) { this.gameModel = gameModel; }
+    
+    // --- Inizializzazione primo livello ---
+    public void initFirstLevel() {
+    	
+    	players.reset();
+
+        // 2. POI, carica la mappa.
+        loadLevelAndPrepareStack(1);
+
+        // 3. INFINE, crea i nemici e imposta le posizioni.
+        initialisingLevel = true;
+        players.takePosition();
+
+        enemies.createEnemy("Zenchan", 13, 10);
+        enemies.createEnemy("Zenchan", 15, 10);
+        enemies.createEnemy("Zenchan", 17, 10);
+
+        bubbles.setNextSpecialBubble(SpecialBubbleType.NONE);
+    }
+
+    private void loadLevelAndPrepareStack(int levelNumber) {
+        tiles.loadLevel(levelNumber); // lo stack viene popolato solo qui
+    }
+
+    // --- Update ciclo di gioco ---
+    public void update() {
+        if (initialisingLevel) {
+            initialisingUpdate();
+        } else {
+            playingUpdate();
+        }
+    }
+
+    private void initialisingUpdate() {
+        // (Questo primo controllo va bene per evitare di iniziare senza nemici creati)
+        if (enemies.noMoreEnemies() && !enemies.hasPendingAdditions()) {
+            return; 
+        }
+        
+        // Usa il nuovo metodo di controllo basato sullo STATO invece che sulla POSIZIONE
+        if (enemies.isPositioningComplete() && players.isPositioningComplete() && tiles.isSlidingDone()) {
+            initialisingLevel = false;
+            
+            items.unlockFactory();
+            bubbles.unlockFactory();
+        }
+    }
+
+    private void playingUpdate() {
+        if (!players.playersAlive()) {
+            state.setState(GameStates.GAMEOVER);
+            
+            endLevel();
+            return;
+        }
+
+        if (enemies.noMoreEnemies()) {
+            endLevelTC++;
+            if (endLevelTC > TICKS_TO_END) {
+                endLevelTC = 0;
+                endLevel();
+            }
+        } else {
+            handleAngryEnemies();
+            handleClockEffect();
+            handleDynamiteEffect();
+        }
+    }
+
+    private void handleAngryEnemies() {
+        if (!angryEnemies) {
+            angryEnemiesTC--;
+            if (angryEnemiesTC <= 0) {
+                enemies.getMad();
+                angryEnemies = true;
+                angryEnemiesTC = 30 * FPS;
+            }
+        }
+    }
+
+    private void handleClockEffect() {
+        if (clock) {
+            clockTC++;
+            if (clockTC > FPS * 10) {
+                enemies.canMove(true);
+                clock = false;
+                clockTC = 0;
+            }
+        }
+    }
+
+    private void handleDynamiteEffect() {
+        if (!dynamite) return;
+
+        dynamiteTC++;
+        if (dynamiteTC == 0) {
+            minorEvents.createEvent(-1, -1, "DYNAMITE");
+        } else if (dynamiteTC == 40) {
+            enemies.exterminate();
+        } else if (dynamiteTC == 80) {
+            dynamite = false;
+            dynamiteTC = 0;
+        }
+    }
+
+    // --- Fine livello ---
+    public void endLevel() {
+        items.reset();
+        items.blockFactory();
+
+        bubbles.reset();
+        bubbles.blockFactory();
+
+        projectiles.reset();
+
+        players.resetPowerUps();
+
+        if (state.getState() == GameStates.PLAYING) {
+        	
+        	enemies.reset();
+        	
+            if (currentLevel < LEVELMAX) {
+                nextLevel();
+            } else {
+                state.setState(GameStates.VICTORY);
+            }
+        } else if (state.getState() == GameStates.GAMEOVER) {
+            enemies.reset();
+        }
+    }
+
+    // --- Passaggio al livello successivo ---
+    public void nextLevel() {
+        currentLevel++;
+        loadLevelAndPrepareStack(currentLevel);
+        tiles.slideToNextLevel();
+
+        initialisingLevel = true;
+        players.takePosition();
+
+        angryEnemies = false;
+        angryEnemiesTC = 30 * FPS;
+
+        // Creazione nemici e impostazione special bubble per ogni livello
+        switch (currentLevel) {
+            case 2:
+                enemies.createEnemy("Zenchan", 14, 5);
+                enemies.createEnemy("Zenchan", 16, 5);
+                enemies.createEnemy("Zenchan", 11, 10);
+                enemies.createEnemy("Zenchan", 19, 10);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.NONE);
+                break;
+            case 3:
+                enemies.createEnemy("Zenchan", 10, 5);
+                enemies.createEnemy("Zenchan", 20, 5);
+                enemies.createEnemy("Zenchan", 6, 10);
+                enemies.createEnemy("Zenchan", 24, 10);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.NONE);
+                break;
+            case 4:
+                enemies.createEnemy("Zenchan", 5, 6);
+                enemies.createEnemy("Zenchan", 25, 6);
+                enemies.createEnemy("Zenchan", 7, 10);
+                enemies.createEnemy("Zenchan", 23, 10);
+                enemies.createEnemy("Zenchan", 9, 20);
+                enemies.createEnemy("Zenchan", 21, 20);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.THUNDER);
+                break;
+            case 5:
+                enemies.createEnemy("Zenchan", 18, 5);
+                enemies.createEnemy("Zenchan", 16, 10);
+                enemies.createEnemy("Zenchan", 14, 15);
+                enemies.createEnemy("Zenchan", 12, 20);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.THUNDER);
+                break;
+            case 6:
+                enemies.createEnemy("Zenchan", 24, 5);
+                enemies.createEnemy("Zenchan", 26, 15);
+                enemies.createEnemy("Maita", 20, 10);
+                enemies.createEnemy("Maita", 15, 25);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.FIRE);
+                break;
+            case 7:
+                enemies.createEnemy("Maita", 2, 5);
+                enemies.createEnemy("Maita", 28, 5);
+                enemies.createEnemy("Maita", 4, 10);
+                enemies.createEnemy("Maita", 26, 10);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.FIRE);
+                break;
+            case 8:
+                enemies.createEnemy("Maita", 8, 8);
+                enemies.createEnemy("Maita", 22, 8);
+                enemies.createEnemy("Monsta", 8, 13);
+                enemies.createEnemy("Monsta", 22, 13);
+                bubbles.setNextSpecialBubble(SpecialBubbleType.THUNDER);
+                break;
+        }
+    }
+
+    public void setDynamite() { dynamite = true; }
+    public void setClock() { clock = true; enemies.canMove(false); }
+    public boolean isInitialising() { return initialisingLevel; }
+    public int getLevel() { return currentLevel; }
+
+    public void resetGame() {
+        currentLevel = 1;
+        players.reset();
+    }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import model.bubbles.Bubble;
+import model.bubbles.PlayerBubble;
+import model.entities.enemies.Enemy;
+import model.entities.players.Player;
+import model.interfaces.Collidable;
+import model.items.Item;
+import model.projectiles.Projectile;
+
+import java.awt.Rectangle; 
+import java.util.List;
+
+public class CollisionManager {
+
+    private final PlayersManager playersManager;
+    private final EnemiesManager enemiesManager;
+    private BubblesManager bubblesManager;
+    private final ItemsManager itemsManager;
+    private final ProjectilesManager projectilesManager;
+
+    private final Rectangle rect1 = new Rectangle();
+    private final Rectangle rect2 = new Rectangle();
+
+    public CollisionManager(PlayersManager playersManager, EnemiesManager enemiesManager, 
+                            BubblesManager bubblesManager, ItemsManager itemsManager, 
+                            ProjectilesManager projectilesManager) {
+        this.playersManager = playersManager;
+        this.enemiesManager = enemiesManager;
+        this.bubblesManager = bubblesManager;
+        this.itemsManager = itemsManager;
+        this.projectilesManager = projectilesManager;
+    }
+
+    public void setBubblesManager(BubblesManager bubblesManager) {
+        this.bubblesManager = bubblesManager;
+    }
+
+    public void checkCollisions() {
+        // Questa parte rimane invariata
+        checkPlayerVsItems();
+        checkPlayerVsEnemies();
+        checkBubblesVsEnemies();
+        checkPlayerVsBubbles();
+        checkProjectilesVsEntities();
+        checkBubbleVsBubble();
+    }
+
+
+    private boolean isColliding(Collidable c1, Collidable c2) {
+        if (c1 == null || c2 == null) return false;
+
+        Rectangle hitbox1 = c1.getHitbox();
+        Rectangle hitbox2 = c2.getHitbox();
+
+        // Aggiorniamo i nostri rettangoli esistenti invece di crearne di nuovi
+        rect1.setBounds(c1.getX() + hitbox1.x, c1.getY() + hitbox1.y, hitbox1.width, hitbox1.height);
+        rect2.setBounds(c2.getX() + hitbox2.x, c2.getY() + hitbox2.y, hitbox2.width, hitbox2.height);
+
+        return rect1.intersects(rect2);
+    }
+
+
+    private void checkPlayerVsItems() {
+        List<Player> players = playersManager.getActivePlayers();
+        List<Item> items = itemsManager.getItems();
+        for (Player p : players) {
+            for (Item i : items) {
+                if (isColliding(p, i)) i.collect(p);
+            }
+        }
+    }
+
+    private void checkPlayerVsEnemies() {
+        for (Player p : playersManager.getActivePlayers()) {
+            if (!p.canDie()) continue;
+            for (Enemy e : enemiesManager.getActiveEnemies()) {
+                if (e.isAttackable() && isColliding(p, e)) p.die();
+            }
+        }
+    }
+
+    private void checkBubblesVsEnemies() {
+        for (Bubble b : bubblesManager.getBubbles()) {
+            if (b instanceof PlayerBubble && b.isProjectile()) {
+                for (Enemy e : enemiesManager.getActiveEnemies()) {
+                    if (e.isAttackable() && isColliding(b, e)) {
+                        ((PlayerBubble) b).trap(e);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void checkPlayerVsBubbles() {
+        for (Player p : playersManager.getActivePlayers()) {
+            boolean onBubble = false;
+            for (Bubble b : bubblesManager.getBubbles()) {
+                if (!b.isProjectile() && isColliding(p, b)) {
+                    if (p.isFalling()) { p.bounceOnBubble(); b.setJumped(); onBubble = true; }
+                    else if (p.isJumping()) { b.pop(p); }
+                }
+            }
+            p.setCollisionOnBubble(onBubble);
+        }
+    }
+
+    private void checkProjectilesVsEntities() {
+        for (Projectile proj : projectilesManager.getProjectiles()) {
+            if (proj.isExploding()) continue;
+
+            for (Enemy e : enemiesManager.getActiveEnemies()) {
+                if (e.isAttackable() && isColliding(proj, e)) {
+                    proj.explode();
+                    e.die();
+                    break;
+                }
+            }
+            if (proj.isExploding()) continue;
+
+            for (Player p : playersManager.getActivePlayers()) {
+                if (p.canDie() && isColliding(proj, p)) {
+                    proj.explode();
+                    p.die();
+                    break;
+                }
+            }
+        }
+    }
+
+    private void checkBubbleVsBubble() {
+        List<Bubble> bubbles = bubblesManager.getBubbles();
+        for (int i = 0; i < bubbles.size(); i++) {
+            for (int j = i + 1; j < bubbles.size(); j++) {
+                Bubble b1 = bubbles.get(i), b2 = bubbles.get(j);
+                if (!b1.isProjectile() && !b2.isProjectile() && isColliding(b1, b2)) {
+                    b1.handleBubbleCollision();
+                    b2.handleBubbleCollision();
+                }
+            }
+        }
+    }
+
+    public void triggerChainReaction(Bubble poppedBubble) {
+        for (Bubble b : bubblesManager.getBubbles()) {
+            if (b == poppedBubble || b.isReadyToRemove()) continue;
+            double dist = Math.hypot(poppedBubble.getCenterX() - b.getCenterX(),
+                                     poppedBubble.getCenterY() - b.getCenterY());
+            if (dist <= Bubble.EXPLOSION_RADIUS) b.pop(poppedBubble.getOwner());
+        }
+    }
+}
+-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.SoundEffects;
+import model.states.GameStates;
+import view.interfaces.GameStateListener;
+import javax.sound.sampled.*;
+import java.io.IOException;
+import java.net.URL;
+import java.util.EnumMap;
+import java.util.Stack;
+
+/**
+ * Gestore audio rifattorizzato.
+ * Pre-carica tutti i suoni all'avvio per efficienza.
+ * Implementa GameStateListener per cambiare la musica in modo reattivo.
+ */
+public class AudioManager implements GameStateListener {
+
+    private final EnumMap<SoundEffects, Clip> clips;
+    private Clip currentMusic;
+
+    public AudioManager() {
+        clips = new EnumMap<>(SoundEffects.class);
+        loadAllSounds();
+    }
+
+    private void loadAllSounds() {
+        for (SoundEffects sound : SoundEffects.values()) {
+            try {
+                URL url = getClass().getResource(sound.getFilePath());
+                if (url == null) {
+                    System.err.println("File audio non trovato: " + sound.getFilePath());
+                    continue;
+                }
+                AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
+                Clip clip = AudioSystem.getClip();
+                clip.open(audioIn);
+                clips.put(sound, clip);
+            } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Riproduce un effetto sonoro breve.
+     * @param effect L'effetto da riprodurre.
+     */
+    public void playSound(SoundEffects effect) {
+        Clip clip = clips.get(effect);
+        if (clip != null) {
+            // Se sta già suonando, lo ferma e lo fa ripartire dall'inizio
+            if (clip.isRunning()) {
+                clip.stop();
+            }
+            clip.setFramePosition(0);
+            clip.start();
+        }
+    }
+
+    /**
+     * Riproduce una traccia musicale in loop, fermando quella precedente.
+     * @param music La musica da riprodurre.
+     */
+    public void playMusic(SoundEffects music) {
+        // Ferma la musica corrente se ce n'è una
+        if (currentMusic != null && currentMusic.isRunning()) {
+            currentMusic.stop();
+        }
+        
+        currentMusic = clips.get(music);
+        if (currentMusic != null) {
+            currentMusic.setFramePosition(0);
+            currentMusic.loop(Clip.LOOP_CONTINUOUSLY);
+        }
+    }
+    
+    public void stopMusic() {
+        if (currentMusic != null && currentMusic.isRunning()) {
+            currentMusic.stop();
+        }
+    }
+
+    /**
+     * --- METODO UPDATE ELIMINATO ---
+     * La logica ora è gestita in modo reattivo da onGameStateChanged.
+     */
+    // public void update() { ... }
+
+    /**
+     * --- METODO REATTIVO ---
+     * Questo metodo viene chiamato automaticamente dal Model quando lo stato del gioco cambia.
+     * @param newState Il nuovo stato del gioco.
+     */
+    @Override
+    public void onGameStateChanged(GameStates newState) {
+        // Ferma sempre la musica precedente quando lo stato cambia
+        stopMusic();
+        
+        // Avvia la nuova musica in base al nuovo stato
+        switch (newState) {
+            case INTRO -> playMusic(SoundEffects.INTRO);
+            case PLAYING -> playMusic(SoundEffects.MAIN_THEME);
+            case STATS_MANAGEMENT -> playMusic(SoundEffects.STATS_THEME);
+            case GAMEOVER -> playMusic(SoundEffects.GAMEOVER_THEME);
+            // Per VICTORY non c'è musica, quindi non facciamo nulla.
+        }
+    }
+
+	@Override
+	public void onLevelChangeStart(Stack<int[]> nextLevelRows) {
+		// TODO Auto-generated method stub
+		
+	}
+}-e 
+--next class--
+
+package model.managers;
+
+import model.GameModel;
+import model.interfaces.EntityProvider;
+import model.interfaces.Updatable;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Classe base astratta per tutti i manager (MODIFICATA PER PERFORMANCE).
+ * Ora usa il pattern "Buffered Modification" per evitare di creare nuove
+ * collezioni ad ogni frame, risolvendo un problema critico di performance.
+ */
+public abstract class BaseManager<T extends Updatable> implements Updatable, EntityProvider<T> {
+
+    protected List<T> entities = new ArrayList<>();
+    private final List<T> toAdd = new ArrayList<>();
+    private final List<T> toRemove = new ArrayList<>();
+
+    protected GameModel gameModel;
+
+    public BaseManager(GameModel gameModel) {
+        this.gameModel = gameModel;
+    }
+
+    public void setGameModel(GameModel gameModel) {
+        this.gameModel = gameModel;
+    }
+
+    /**
+     * Aggiunge l'entità a una lista d'attesa.
+     * L'aggiunta effettiva avverrà alla fine del ciclo di update.
+     * @param entity L'entità da aggiungere.
+     */
+    public void add(T entity) {
+        toAdd.add(entity);
+    }
+
+    /**
+     * Aggiunge l'entità a una lista d'attesa per la rimozione.
+     * @param entity L'entità da rimuovere.
+     */
+    public void remove(T entity) {
+        // Aggiungiamo alla lista temporanea per la rimozione.
+        toRemove.add(entity);
+    }
+
+    /**
+     * 1. Aggiorna tutte le entità esistenti.
+     * 2. Applica le modifiche (rimozioni e aggiunte) in modo sicuro.
+     */
+    @Override
+    public void update() {
+        // FASE 1: Aggiorna lo stato di tutte le entità nella lista principale.
+        for (T entity : entities) {
+            entity.update();
+        }
+
+        // FASE 2: Applica le aggiunte bufferizzate.
+        for (T entity : toAdd) {
+            if (!entities.contains(entity)) {
+                entities.add(entity);
+                if (gameModel != null) {
+                    gameModel.notifyEntityAdded(entity);
+                }
+            }
+        }
+        toAdd.clear(); // Svuota la lista d'attesa per il prossimo frame.
+
+        // FASE 3: Applica le rimozioni bufferizzate.
+        for (T entity : toRemove) {
+            if (entities.remove(entity)) {
+                if (gameModel != null) {
+                    gameModel.notifyEntityRemoved(entity);
+                }
+            }
+        }
+        toRemove.clear(); // Svuota la lista d'attesa per il prossimo frame.
+    }
+
+    /**
+     * Svuota il manager, assicurandosi di processare anche le entità
+     * in attesa di essere rimosse e di pulire quelle in attesa di essere aggiunte.
+     */
+    public void reset() {
+        // Aggiunge tutte le entità correnti alla lista di rimozione.
+        toRemove.addAll(entities);
+        // Pulisce eventuali aggiunte in sospeso che non sono mai state processate.
+        toAdd.clear();
+        
+        // Nota: Le entità verranno effettivamente rimosse e notificate
+        // al prossimo ciclo di update(). Questo garantisce coerenza.
+    }
+    
+    /**
+     * Restituisce una copia difensiva della lista di entità.
+     * Questo metodo è usato principalmente dalla View, che non viene chiamata
+     * 60 volte al secondo, quindi il costo di creare una copia qui è accettabile
+     * e garantisce sicurezza.
+     * @return una nuova lista contenente le entità attuali.
+     */
+    @Override
+    public List<T> getEntities() {
+        return new ArrayList<>(entities);
+    }
+    
+    protected boolean hasPendingAdditions() {
+        return !toAdd.isEmpty();
+    }
+}-e 
+--next class--
+
+package model.projectiles;
+
+import java.awt.Rectangle;
+import model.utils.DirectionX;
+import static constants.Constants.*;
+
+public class Thunder extends Projectile {
+
+    public Thunder(int x, int y, int[][] tileMap) {
+        super(x, y, x < SCREENWIDTH / 2 ? DirectionX.RIGHT : DirectionX.LEFT, tileMap);
+        this.speed = 6; // Velocità personalizzabile
+        this.hitbox = new Rectangle(0, 0, TILESIZE / 2, TILESIZE); // hitbox valida per collisioni
+    }
+
+    @Override
+    public void update() {
+        if (readyToRemove) return;
+
+        collisionX = false;
+        updateCoordinates();
+        checkTilesCollisions();
+
+        if (collisionX || x < 0 || x > SCREENWIDTH) {
+            readyToRemove = true;
+            return;
+        }
+
+        switch (direction) {
+            case LEFT -> x -= speed;
+            case RIGHT -> x += speed;
+        }
+    }
+
+    @Override
+    protected void checkTilesCollisions() {
+        int rowTop = (int) projectileTopRow;
+        int rowBottom = (int) projectileBottomRow;
+        int colLeft = (int) projectileLeftCol;
+        int colRight = (int) projectileRightCol;
+
+        if (rowTop >= 0 && rowBottom < MAXSCREENROW && colLeft >= 0 && colRight < MAXSCREENCOL) {
+            int tileTopLeft = tileMap[rowTop][colLeft];
+            int tileTopRight = tileMap[rowTop][colRight];
+            int tileBottomLeft = tileMap[rowBottom][colLeft];
+            int tileBottomRight = tileMap[rowBottom][colRight];
+
+            if (tileTopLeft != 0 || tileTopRight != 0 || tileBottomLeft != 0 || tileBottomRight != 0) {
+                collisionX = true;
+            }
+        }
+    }
+
+    // --- Drawable methods ---
+
+    public String getTypeData() { return "THUNDER"; }
+    
+    public String getActionData() { return "MOVING"; }
+    
+    public String getDirectionData() { return null; }
+    
+    public boolean isFlashing() { return false; }
+}
+-e 
+--next class--
+
+package model.projectiles;
+
+import static constants.Constants.*;
+import model.utils.DirectionX;
+
+public class MaitaProjectile extends Projectile {
+
+    private int explodingTC;
+
+    public MaitaProjectile(int x, int y, DirectionX direction, int[][] tileMap) {
+        super(x, y, direction, tileMap);
+        this.speed = 3;
+        this.hitbox = new java.awt.Rectangle(10, 0, TILESIZE * 2, TILESIZE);
+    }
+
+    @Override
+    public void update() {
+        if (exploding) {
+            explodingTC++;
+            if (explodingTC >= 30) readyToRemove = true;
+            return;
+        }
+
+        collisionX = false;
+        updateCoordinates();
+        checkTilesCollisions();
+
+        if (collisionX) explode();
+        else {
+            switch (direction) {
+                case LEFT: x -= speed; break;
+                case RIGHT: x += speed; break;
+            }
+        }
+    }
+
+    @Override
+    protected void checkTilesCollisions() {
+        int tile1 = tileMap[(int) projectileTopRow][(int) projectileLeftCol];
+        int tile2 = tileMap[(int) projectileTopRow][(int) projectileRightCol];
+        if (tile1 != 0 || tile2 != 0) collisionX = true;
+    }
+
+    public String getTypeData() { return "MAITA"; }
+    public String getActionData() { return exploding ? "EXPLODING" : "MOVING"; }
+    public String getDirectionData() { return null; }
+    public boolean isFlashing() { return false; }
+}
+-e 
+--next class--
+
+package model.projectiles;
+
+import java.awt.Rectangle;
+import model.GameObject;
+import model.interfaces.Collidable;
+import model.interfaces.Updatable;
+import model.utils.DirectionX;
+import view.interfaces.Drawable;
+
+import static constants.Constants.*;
+
+public abstract class Projectile extends GameObject implements Collidable, Updatable, Drawable {
+
+    protected int x, y;
+    protected Rectangle hitbox;
+    protected int speed;
+    protected DirectionX direction;
+
+    protected int projectileLeft, projectileRight, projectileTop, projectileBottom;
+    protected double projectileLeftCol, projectileRightCol, projectileTopRow, projectileBottomRow;
+
+    protected boolean moving = true;
+    protected boolean collisionX;
+    protected boolean readyToRemove = false;
+
+    protected boolean exploding;
+    protected int explodingTC;
+
+    // Campi comuni per le animazioni
+    protected int counterTC = 0;
+    protected int spriteIdx = 0;
+    protected final int animationSpeed = 20;
+    
+    protected final int[][] tileMap;
+
+    public Projectile(int x, int y, DirectionX direction, int[][] tileMap) {
+        this.x = x;
+        this.y = y;
+        this.direction = direction;
+        this.tileMap = tileMap;
+        this.hitbox = new Rectangle(0, 0, 10, 10); // default, sovrascrivere nelle sottoclassi
+    }
+
+    public void update() {
+        updateAnimeCounter();
+    }
+    
+    protected void updateAnimeCounter() {
+    	
+    	if (counterTC > animationSpeed) {
+    		spriteIdx++;
+    	}
+    	
+    	counterTC++;
+    }
+
+    protected void updateCoordinates() {
+        projectileLeft = x + hitbox.x;
+        projectileRight = projectileLeft + hitbox.width;
+        projectileTop = y + hitbox.y;
+        projectileBottom = projectileTop + hitbox.height;
+
+        projectileLeftCol = projectileLeft / (double) TILESIZE;   // CORRETTO
+        projectileRightCol = projectileRight / (double) TILESIZE; // CORRETTO
+        projectileTopRow = projectileTop / (double) TILESIZE;     // CORRETTO
+        projectileBottomRow = projectileBottom / (double) TILESIZE; // CORRETTO
+    }
+
+    protected abstract void checkTilesCollisions();
+
+    public void explode() {
+        exploding = true;
+        explodingTC = 0;
+    }
+
+    public boolean isExploding() {
+        return exploding;
+    }
+
+    public boolean isReadyToRemove() {
+        return readyToRemove;
+    }
+
+    @Override
+    public int getX() { return x; }
+
+    @Override
+    public int getY() { return y; }
+
+    @Override
+    public Rectangle getHitbox() {
+        return hitbox;
+    }
+    
+	@Override
+	public int getTickCounter() {return counterTC;}
+
+	@Override
+	public int getSpriteIdx() {return spriteIdx;}
+
+	@Override
+	public int getAnimationSpeed() {return animationSpeed;}
+	
+}
+-e 
+--next class--
+
+package model.projectiles;
+
+import static constants.Constants.*;
+import model.managers.ProjectilesManager;
+import model.utils.DirectionX;
+
+public class FireChild extends Fire {
+
+    private final DirectionX childDirection;
+
+    public FireChild(int x, int y, Fire root, DirectionX childDirection, int charges, int[][] tileMap, ProjectilesManager pm) {
+        super(x, y, tileMap, pm);
+        this.root = root;
+        this.charges = charges;
+        this.childDirection = childDirection;
+        this.falling = false;
+    }
+
+    @Override
+    protected void propagate() {
+        int row = y / TILESIZE;
+        int col = x / TILESIZE;
+
+        if (charges <= 0) return;
+
+        switch (childDirection) {
+            case LEFT:
+                if (col > 0 && tileMap[row][col - 1] == 0 && tileMap[row + 2][col - 1] != 0)
+                    generateChild(DirectionX.LEFT, charges);
+                break;
+            case RIGHT:
+                if (col < MAXSCREENCOL - 1 && tileMap[row][col + 1] == 0 && tileMap[row + 2][col + 1] != 0)
+                    generateChild(DirectionX.RIGHT, charges);
+                break;
+        }
+    }
+}
+-e 
+--next class--
+
+package model.projectiles;
+
+import model.utils.DirectionX;
+import model.managers.ProjectilesManager;
+
+import static constants.Constants.*;
+
+public class Fire extends Projectile {
+
+    protected Fire root;
+    protected boolean falling = true;
+    protected boolean collisionFloor = false;
+
+    protected int charges = 2;
+    private int propagateTC = 20;
+    private int fireTC = 5 * FPS;
+
+    private final ProjectilesManager projectilesManager;
+
+    public Fire(int x, int y, int[][] tileMap, ProjectilesManager projectilesManager) {
+        super(x, y, DirectionX.RIGHT, tileMap);
+        this.root = this;
+        this.projectilesManager = projectilesManager;
+        this.speed = 4;
+        this.hitbox = new java.awt.Rectangle(10, 0, TILESIZE * 2 - 20, TILESIZE * 2);
+    }
+
+    @Override
+    public void update() {
+        updateCoordinates();
+        checkTilesCollisions();
+
+        if (falling) {
+            if (collisionFloor) falling = false;
+            else y += speed;
+        } else {
+            if (propagateTC > 0) propagateTC--;
+            else if (charges > 0) propagate();
+
+            if (fireTC > 0) fireTC--;
+            else readyToRemove = true;
+        }
+    }
+
+    @Override
+    protected void updateCoordinates() {
+        projectileLeft = x + hitbox.x;
+        projectileRight = projectileLeft + hitbox.width;
+        projectileTop = y + hitbox.y;
+        projectileBottom = projectileTop + hitbox.height;
+
+        if (falling) projectileBottom += speed;
+
+        projectileLeftCol = projectileLeft / (double) TILESIZE;
+        projectileRightCol = projectileRight / (double) TILESIZE;
+        projectileTopRow = projectileTop / (double) TILESIZE;
+        projectileBottomRow = projectileBottom / (double) TILESIZE;
+    }
+
+    @Override
+    protected void checkTilesCollisions() {
+        int tile1 = tileMap[(int) projectileBottomRow][(int) projectileLeftCol];
+        int tile2 = tileMap[(int) projectileBottomRow][(int) projectileRightCol];
+
+        if (tile1 != 0 || tile2 != 0) collisionFloor = true;
+    }
+
+    protected void propagate() {
+        int row = y / TILESIZE;
+        int col = x / TILESIZE;
+
+        if (charges <= 0) return;
+
+        if (col > 0 && tileMap[row][col - 1] == 0 && tileMap[row + 2][col - 1] != 0)
+            generateChild(DirectionX.LEFT, charges);
+        if (col < MAXSCREENCOL - 1 && tileMap[row][col + 1] == 0 && tileMap[row + 2][col + 1] != 0)
+            generateChild(DirectionX.RIGHT, charges);
+    }
+
+    protected void generateChild(DirectionX childDirection, int parentCharges) {
+        int childX = (childDirection == DirectionX.LEFT) ? x - TILESIZE : x + TILESIZE;
+        projectilesManager.spawnFireChild(childX, y, root, childDirection, parentCharges - 1);
+    }
+
+    // Drawable methods
+    public String getTypeData() { return "FIRE"; }
+    public String getActionData() { return null; }
+    public String getDirectionData() { return null; }
+    public boolean isFlashing() { return false; }
+}
+-e 
+--next class--
+
+package model.utils;
+
+public enum DirectionX {
+  LEFT,RIGHT;
+}
+-e 
+--next class--
+
+package model.utils;
+
+public enum DirectionY {
+  UP,DOWN;
+}
+-e 
+--next class--
+
+package model.utils;
+
+public class Range {
+    private final int low;
+    private final int high;
+
+    public Range(int low, int high) {
+        this.low = low;
+        this.high = high;
+    }
+
+    public boolean contains(int value) {
+        return value >= low && value < high;
+    }
+}
+-e 
+--next class--
+
+package model.utils;
+
+import model.interfaces.Updatable;
+
+public class MinorEvent implements Updatable {
+
+    private final int x, y, scoredPoints;
+    private final String type, user;
+
+    public MinorEvent(int x, int y, String type, String user, int scoredPoints) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.user = user;
+        this.scoredPoints = scoredPoints;
+    }
+
+    public int getX() { return x; }
+    public int getY() { return y; }
+    public String getUser() { return user; }
+    public String getType() { return type; }
+    public int getScoredPoints() { return scoredPoints; }
+
+    @Override
+    public void update() {
+        // Nessuna logica, serve solo per compatibilità con MinorEventsManager
+    }
+}
+-e 
+--next class--
+
+package model.ai; 
+
+import model.entities.enemies.Enemy;
+import model.entities.players.Player;
+import model.managers.PlayersManager;
+import model.utils.DirectionX;
+import static constants.Constants.*;
+
+import java.util.List;
+
+public class EnemyAIService {
+    
+    private final PlayersManager playersManager;
+
+    /**
+     * Il servizio riceve le dipendenze di cui ha bisogno per operare.
+     * @param playersManager Il manager da cui ottenere informazioni sui giocatori.
+     */
+    public EnemyAIService(PlayersManager playersManager) {
+        this.playersManager = playersManager;
+    }
+    
+    /**
+     * Decide la direzione orizzontale del nemico per avvicinarsi al giocatore.
+     */
+    public void moveEnemyX(Enemy enemy, Player targetPlayer) {
+        if (targetPlayer == null) return;
+        
+        // Confronta i centri delle hitbox per un movimento più preciso
+        if (enemy.getCenterX() < targetPlayer.getCenterX()) {
+            enemy.move(DirectionX.RIGHT);
+        } else {
+            enemy.move(DirectionX.LEFT);
+        }
+    }
+    
+    /**
+     * Decide se il nemico deve saltare per raggiungere il giocatore.
+     */
+    public void moveEnemyY(Enemy enemy, Player targetPlayer) {
+        if (targetPlayer == null) {
+            return;
+        }
+
+        if (targetPlayer.getBottomY() < enemy.getY()) {
+            enemy.jump();
+        }
+        // Caso 2: Il nemico è sopra il giocatore. Il nemico si ferma (o pattuglia).
+        // Condizione: la base del nemico è più in alto della testa del giocatore.
+        else if (enemy.getBottomY() < targetPlayer.getY()) {
+            // Qui il nemico è in vantaggio, non dovrebbe muoversi o dovrebbe preparare un attacco dall'alto.
+            enemy.freezeInputs();
+        }
+        // Caso 3: Il nemico e il giocatore sono circa alla stessa altezza.
+        // Il nemico deve essere libero di muoversi orizzontalmente per inseguire il giocatore.
+        else {
+            enemy.unfreezeInputs();
+        }
+    }
+    
+    /**
+     * MODIFICA: Metodo robusto che trova dinamicamente il giocatore più vicino.
+     * Non si basa più su campi statici.
+     */
+    public Player getCloserPlayer(Enemy enemy) {
+        List<Player> activePlayers = playersManager.getActivePlayers();
+
+        if (activePlayers.isEmpty()) {
+            return null; // Nessun giocatore attivo
+        }
+        if (activePlayers.size() == 1) {
+            return activePlayers.get(0); // Solo un giocatore
+        }
+        
+        // Se ci sono due giocatori, calcola la distanza e restituisci il più vicino
+        Player p1 = activePlayers.get(0);
+        Player p2 = activePlayers.get(1);
+        
+        int dist1 = Math.abs(enemy.getX() - p1.getX()) + Math.abs(enemy.getY() - p1.getY());
+        int dist2 = Math.abs(enemy.getX() - p2.getX()) + Math.abs(enemy.getY() - p2.getY());
+        
+        return (dist1 < dist2) ? p1 : p2;
+    }
+    
+    /**
+     * Controlla se il nemico è allineato con il giocatore e in caso affermativo attacca.
+     */
+    public boolean manageAttack(Enemy enemy, Player targetPlayer) {
+        if (targetPlayer == null) return false;
+        
+        int targetMidY = targetPlayer.getY() + (targetPlayer.getHitbox().height / 2);
+        
+        // Controlla se il giocatore è all'incirca alla stessa altezza
+        if (enemy.getY() - TILESIZE < targetMidY && targetMidY < enemy.getY() + TILESIZE * 2) {
+            if (enemy.getDirection() == DirectionX.LEFT) {
+                if (targetPlayer.getX() < enemy.getX()) {
+                    enemy.attack();
+                    return true;
+                }
+            } else { // Direzione a destra
+                if (targetPlayer.getX() > enemy.getX()) {
+                    enemy.attack();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}-e 
+--next class--
+
+package model;
+
+/**
+ * Un catalogo di tutti i file audio del gioco.
+ * Questa enum ora contiene solo il percorso della risorsa, senza logica di riproduzione.
+ */
+public enum SoundEffects {
+    MAIN_THEME("/audio/maintheme.wav"),
+    GAMEOVER_THEME("/audio/gameover.wav"),
+    STATS_THEME("/audio/nameregister.wav"),
+    INTRO("/audio/intro.wav"),
+    JUMP("/audio/jump.wav"),
+    ITEM("/audio/itemcollision.wav"),
+    BUBBLE("/audio/bubble.wav"),
+    DEATH("/audio/dying.wav"),
+    ENEMY_DEATH("/audio/enemydying1.wav"); // Semplificato per l'esempio
+
+    private final String filePath;
+
+    SoundEffects(String filePath) {
+        this.filePath = filePath;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+}-e 
+--next class--
+
+package model.interfaces;
+
+import model.entities.players.Player;
+
+public interface Collectible {
+    void collect(Player player);
+    boolean isReadyToRemove();
+}
+-e 
+--next class--
+
+package model.interfaces;
+
+import java.awt.Rectangle;
+import static constants.Constants.*; // Aggiungi questo import se non c'è
+
+public interface Collidable {
+    
+    // Metodi base richiesti da ogni oggetto "collidibile"
+    Rectangle getHitbox();
+    int getX();
+    int getY();
+
+    // NUOVO: Metodi di utilità ereditati da Hitboxable.
+    // Forniscono calcoli comuni senza bisogno di riscrivere codice.
+    default int getLeft() { return getX() + getHitbox().x; }
+    default int getRight() { return getX() + getHitbox().x + getHitbox().width; }
+    default int getTop() { return getY() + getHitbox().y; }
+    default int getBottom() { return getY() + getHitbox().y + getHitbox().height; }
+
+    default int getLeftCol() { return getLeft() / TILESIZE; }
+    default int getRightCol() { return getRight() / TILESIZE; }
+    default int getTopRow() { return getTop() / TILESIZE; }
+    default int getBottomRow() { return getBottom() / TILESIZE; }
+}-e 
+--next class--
+
+package model.interfaces;
+
+public interface Updatable {
+    void update();
+}-e 
+--next class--
+
+package model.interfaces;
+
+import java.util.List;
+
+/**
+ * Definisce il contratto per qualsiasi oggetto che possa fornire
+ * una lista di entità di un certo tipo.
+ * È usato per disaccoppiare la View dai Manager concreti del Model.
+ * @param <T> il tipo di entità fornita, deve essere almeno Updatable.
+ */
+public interface EntityProvider<T extends Updatable> {
+    
+    /**
+     * Restituisce una lista delle entità gestite.
+     * Si raccomanda di restituire una copia della lista per evitare
+     * modifiche concorrenti dall'esterno (incapsulamento).
+     * @return una lista di entità.
+     */
+    List<T> getEntities();
+}-e 
+--next class--
+
+package model.items;
+
+import static constants.Constants.*;
+
+import model.entities.PowerUpType;
+import model.entities.players.Player;
+import model.managers.TilesManager;
+
+
+public class SpecialItem extends Item {
+    private final PowerUpType itemType; 
+
+    public SpecialItem(PowerUpType itemType, int x, int y, TilesManager tilesManager) { // MODIFICATO
+        super(x, y, 2 * TILESIZE, tilesManager);
+        this.itemType = itemType;
+    }
+
+    @Override
+    public void collect(Player collector) {
+        if (!readyToRemove) {
+            collector.activatePowerUp(itemType); // Ora passa l'enum
+            readyToRemove = true;
+        }
+    }
+
+    public PowerUpType getItemType() { return itemType; }
+
+    @Override
+    public String getTypeData() { return "SPECIAL"; }
+
+}
+-e 
+--next class--
+
+package model.items;
+
+import java.awt.Point;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Optional;
+import java.util.Random;
+
+import static constants.Constants.*;
+
+public class FoodRandomizer {
+
+    private final HashMap<Range, String> foodTypes = new HashMap<>();
+    private final ArrayList<Point> coordinates = new ArrayList<>();
+    private final Random random = new Random();
+    private int[][] tiles;
+
+    public FoodRandomizer(int[][] tiles) {
+        this.tiles = tiles;
+        setItemTypes();
+        updateMap();
+    }
+
+    private void setItemTypes() {
+        foodTypes.put(new Range(0, 25), "GreenPepper");
+        foodTypes.put(new Range(25, 45), "RedTurnip");
+        foodTypes.put(new Range(45, 60), "Cucumber");
+        foodTypes.put(new Range(60, 75), "Corn");
+        foodTypes.put(new Range(75, 85), "Persimmon");
+        foodTypes.put(new Range(85, 90), "Banana");
+        foodTypes.put(new Range(90, 94), "Peach");
+        foodTypes.put(new Range(94, 97), "FrenchFries");
+        foodTypes.put(new Range(97, 99), "Crystal");
+        foodTypes.put(new Range(99, 100), "BigWatermelon");
+    }
+
+    public void updateMap() {
+        coordinates.clear();
+        int x = 2;
+        int y = 3;
+        int boundX = MAXSCREENCOL - 3;
+        int boundY = MAXSCREENROW;
+
+        while (y < boundY) {
+            int tileNum = tiles[y][x];
+            if (tileNum != 0 && tiles[y - 2][x] == 0) coordinates.add(new Point(x, y - 2));
+
+            x++;
+            if (x == boundX) {
+                x = 0;
+                y++;
+            }
+        }
+    }
+
+    public Point randomizeCoordinates() {
+        if (coordinates.isEmpty()) return new Point(0, 0);
+        int rIndex = random.nextInt(coordinates.size());
+        return coordinates.get(rIndex);
+    }
+
+    public String randomizeItem() {
+        int r = random.nextInt(100);
+        Optional<String> type = foodTypes.entrySet()
+                .stream()
+                .filter(i -> i.getKey().contains(r))
+                .map(i -> i.getValue())
+                .findFirst();
+        return type.orElse("GreenPepper");
+    }
+
+    private static class Range {
+        private final int low;
+        private final int high;
+
+        private Range(int low, int high) {
+            this.low = low;
+            this.high = high;
+        }
+
+        private boolean contains(int number) {
+            return number >= low && number < high;
+        }
+    }
+}
+-e 
+--next class--
+
+package model.items;
+
+import static constants.Constants.*;
+import java.awt.Rectangle;
+import model.GameObject;
+import model.entities.players.Player;
+import model.interfaces.Collidable;
+import model.interfaces.Updatable;
+import model.managers.TilesManager;
+import view.interfaces.Drawable;
+
+public abstract class Item extends GameObject implements Drawable, Collidable, Updatable {
+
+    protected String name;
+    protected int x, y;
+    protected Rectangle hitbox;
+    protected int entityLeft, entityRight, entityBottom;
+    protected double entityLeftCol, entityRightCol, entityBottomRow;
+    protected boolean floorCollision;
+    protected int fallSpeed = 2;
+    protected boolean readyToRemove = false;
+    
+    
+
+    protected final int[][] tileMap;
+
+    public Item(int x, int y, int side, TilesManager tilesManager) {
+        this.x = x;
+        this.y = y;
+        this.hitbox = new Rectangle(10, 0, side - 20, side);
+        this.tileMap = tilesManager.getMap();
+    }
+
+    public abstract void collect(Player collector);
+
+    @Override
+    public void update() {
+        // Se l'oggetto è già atterrato, non c'è bisogno di fare altri calcoli.
+        if (floorCollision) {
+            return;
+        }
+
+        updateCoordinates();
+        checkTilesCollisions(); // Questo metodo ora gestisce lo snap e la rimozione.
+        
+        // Se, dopo il controllo, non ha toccato il pavimento, continua a cadere.
+        if (!floorCollision) {
+            y += fallSpeed;
+        }
+    }
+
+    private void updateCoordinates() {
+        entityLeft = x + hitbox.x;
+        entityRight = x + hitbox.x + hitbox.width;
+        entityBottom = y + hitbox.y + hitbox.height;
+
+        entityLeftCol = entityLeft / TILESIZE;
+        entityRightCol = entityRight / TILESIZE;
+        entityBottomRow = (entityBottom + fallSpeed) / TILESIZE;
+    }
+
+    private void checkTilesCollisions() {
+
+        if (entityBottomRow >= MAXSCREENROW) {
+            readyToRemove = true; 
+            return;
+        }
+
+        // Eseguiamo il controllo solo se siamo dentro i limiti della mappa
+        if (entityBottomRow >= 0 && entityLeftCol >= 0 && entityRightCol < MAXSCREENCOL) {
+            int tile1 = tileMap[(int)entityBottomRow][(int)entityLeftCol];
+            int tile2 = tileMap[(int)entityBottomRow][(int)entityRightCol];
+            
+            if (tile1 != 0 || tile2 != 0) {
+                floorCollision = true;
+                
+                y = (int)(entityBottomRow * TILESIZE) - (hitbox.y + hitbox.height);
+            }
+        }
+    }
+
+    // --- Getters ---
+    public Rectangle getHitbox() { return hitbox; }
+    public int getX() { return x; }
+    public int getY() { return y; }
+    public boolean isReadyToRemove() { return readyToRemove; }
+
+    // --- Drawable ---
+    
+    @Override
+    public abstract String getTypeData();
+    
+    @Override
+    public String getDirectionData() { return null; }
+    
+    @Override
+    public String getActionData() { return null; }
+    
+    @Override
+    public boolean isFlashing() { return false; }
+    
+	@Override
+	public int getTickCounter() {return 0;}
+
+	@Override
+	public int getSpriteIdx() {return 0;}
+
+	@Override
+	public int getAnimationSpeed() {return 0;} 
+
+}
+-e 
+--next class--
+
+package model.items;
+
+import static constants.Constants.*;
+import model.entities.players.Player;
+import model.managers.TilesManager;
+
+public class Food extends Item {
+
+    private final int scoreValue;
+
+    public Food(int x, int y, int side, int score, TilesManager tilesManager) {
+        super(x, y, side, tilesManager);
+        this.scoreValue = score;
+    }
+
+    public Food(int x, int y, int score, TilesManager tilesManager) {
+        this(x, y, 2 * TILESIZE, score, tilesManager);
+    }
+
+    @Override
+    public void collect(Player collector) {
+        if (!readyToRemove) {
+            collector.addScore(scoreValue);
+            readyToRemove = true;
+        }
+    }
+
+    public int getScore() { return scoreValue; }
+
+    @Override
+    public String getTypeData() { return "FOOD"; }
+}
+-e 
+--next class--
+
+package model.states;
+
+import model.GameModel; // Importa GameModel
+
+public class StateManager {
+    
+    private GameStates currentState;
+    private GameModel gameModel; // NUOVO: Riferimento al Model
+
+    public StateManager() {
+        // L'impostazione iniziale dello stato non deve notificare nulla,
+        // quindi la lasciamo qui prima che il gameModel sia impostato.
+        this.currentState = GameStates.INTRO; 
+    }
+
+    // NUOVO: Metodo per l'iniezione del GameModel
+    public void setGameModel(GameModel gameModel) {
+        this.gameModel = gameModel;
+    }
+    
+    public GameStates getState() {
+        return currentState;
+    }
+
+    /**
+     * MODIFICATO: Ora questo metodo notifica anche il cambio di stato.
+     * @param newState il nuovo stato del gioco.
+     */
+    public void setState(GameStates newState) {
+        // Cambia e notifica solo se lo stato è effettivamente diverso
+        if (this.currentState != newState) {
+            this.currentState = newState;
+            
+            // Invia la notifica se il gameModel è stato collegato
+            if (gameModel != null) {
+                gameModel.notifyGameStateChanged(newState);
+            }
+        }
+    }
+}-e 
+--next class--
+
+package model.states;
+
+public enum GameStates {
+	INTRO,
+	PLAYING,
+	STATS_MANAGEMENT,
+	GAMEOVER,
+	VICTORY;
+}
+-e 
+--next class--
+
+package model.entities;
+
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.util.Random;
+import model.GameObject;
+import model.interfaces.Collidable;
+import model.managers.AudioManager;
+import model.managers.TilesManager;
+import model.utils.DirectionX;
+import view.interfaces.Drawable;
+import static constants.Constants.*;
+
+/**
+ * Classe base astratta per tutte le entità animate del gioco (rifattorizzata).
+ * Contiene i campi e le logiche comuni di movimento, fisica e stato.
+ * Ora gestisce direttamente le dipendenze base e la fisica delle collisioni.
+ */
+public abstract class Entity extends GameObject implements Drawable, Collidable {
+
+    // --- CAMPI COMUNI ---
+    protected int x, y;
+    protected Rectangle hitbox;
+    protected Point spawnPoint;
+    protected Random random = new Random();
+
+    // Movimento
+    protected int speed;
+    protected DirectionX xDirection = DirectionX.RIGHT;
+    protected boolean moving;
+    
+    // Fisica
+    protected boolean jumping, falling, collisionFloor;
+    protected float jumpSpeed, defaultJumpSpeed, fallSpeed;
+    
+    // Stato
+    protected boolean attacking, positioning, dying;
+    protected int attackTC;
+    protected int positionTC;
+    
+
+    // Campi interni per le collisioni
+    protected int entityLeft, entityRight, entityTop, entityBottom;
+    protected boolean collisionX;
+    
+    // Campi comuni per le animazioni
+    protected int counterTC = 0;
+    protected int spriteIdx = 0;
+    protected final int animationSpeed = 20;
+    
+    // --- DIPENDENZE COMUNI A TUTTE LE ENTITÀ ---
+    protected final TilesManager tilesManager;
+    protected final AudioManager audioManager;
+    
+    /**
+     * Costruttore base per ogni entità.
+     * Riceve le dipendenze fondamentali che verranno ereditate da tutte le sottoclassi.
+     */
+    public Entity(TilesManager tilesManager, AudioManager audioManager) {
+        this.tilesManager = tilesManager;
+        this.audioManager = audioManager;
+    }
+
+    // --- METODI DI LOGICA COMUNE IMPLEMENTATI QUI ---
+
+    
+    public void update() {
+        updateAnimeCounter();
+    }
+    /**
+     * Contiene la logica per spostare l'entità verso il suo spawn point.
+     * Viene chiamato dall'update() delle sottoclassi quando il flag 'positioning' è true.
+     */
+    protected abstract void positioningUpdate();
+
+    // Aggiungi questo nuovo metodo di aiuto che il Player potrà usare
+    protected void moveToSpawnPoint() {
+    	if (spawnPoint == null) return;
+     
+    	if (x < spawnPoint.x) x = Math.min(x + speed, spawnPoint.x);
+    	else if (x > spawnPoint.x) x = Math.max(x - speed, spawnPoint.x);
+     	if (y < spawnPoint.y) y = Math.min(y + speed, spawnPoint.y);
+     	else if (y > spawnPoint.y) y = Math.max(y - speed, spawnPoint.y);
+ }
+    
+
+    // Questo metodo controlla se l'entità è arrivata.
+    public boolean inSpawnPosition() {
+        if (spawnPoint == null) return false;
+        return (Math.abs(x - spawnPoint.x) < speed && Math.abs(y - spawnPoint.y) < speed);
+    }
+
+    /**
+     * Aggiorna le coordinate assolute dei bordi della hitbox.
+     * Fondamentale per il controllo delle collisioni.
+     */
+    protected void updateCoordinates() {
+        if (hitbox == null) return; // Controllo di sicurezza
+        entityLeft = x + hitbox.x;
+        entityRight = x + hitbox.x + hitbox.width;
+        entityTop = y + hitbox.y;
+        entityBottom = y + hitbox.y + hitbox.height;
+    }
+
+    /**
+     * Controlla le collisioni verticali con le tile della mappa.
+     * Questa logica ora è condivisa da Player e Enemy.
+     */
+    protected void checkTilesCollisions() {
+        collisionFloor = false;
+        collisionX = false;
+        if (hitbox == null) return;
+
+        int[][] currentMap = tilesManager.getMap();
+
+        // --- CONTROLLO VERTICALE (PAVIMENTO) - CORRETTO ---
+        if (falling) {  
+        	int xLeft = entityLeft;
+            int xRight = entityRight;
+            double nextEntityBottom = entityBottom + fallSpeed;
+            int startRow = entityBottom / TILESIZE;
+            int endRow = (int) (nextEntityBottom / TILESIZE);
+
+            for (int rowToCheck = startRow; rowToCheck <= endRow; rowToCheck++) {
+                if (rowToCheck < 0 || rowToCheck >= MAXSCREENROW) continue;
+                int leftCol = xLeft / TILESIZE;
+                int rightCol = xRight / TILESIZE;
+                if (leftCol < 0 || rightCol >= MAXSCREENCOL) continue;
+
+                if (currentMap[rowToCheck][leftCol] != 0 || 
+                    currentMap[rowToCheck][rightCol] != 0) {
+                    
+                    y = rowToCheck * TILESIZE - (hitbox.y + hitbox.height);
+                    collisionFloor = true;
+                    falling = false;
+                    fallSpeed = 0;
+                    break; 
+                }
+            }
+        }
+        
+        // --- CONTROLLO ORIZZONTALE (MURI E BORDI SCHERMO) - VERSIONE CORRETTA ---
+        if (moving) {
+            double nextXLeft = entityLeft + (xDirection == DirectionX.LEFT ? -speed : 0);
+            double nextXRight = entityRight + (xDirection == DirectionX.RIGHT ? speed : 0);
+
+            if (nextXLeft < TILESIZE * 2 || nextXRight > SCREENWIDTH - TILESIZE * 2) {
+                collisionX = true;
+            }
+
+            // FIX #3: CONTROLLO DEI MURI (TILE) - Eseguito solo se non si è in aria
+            // e se non abbiamo già trovato una collisione con i bordi dello schermo.
+            if (!collisionX && !jumping && !falling) {
+                double nextCol;
+                if (xDirection == DirectionX.RIGHT) {
+                    nextCol = (entityRight + speed) / (double) TILESIZE;
+                } else { // LEFT
+                    nextCol = (entityLeft - speed) / (double) TILESIZE;
+                }
+
+                if (nextCol >= 0 && nextCol < MAXSCREENCOL) {
+                    int topRow = entityTop / TILESIZE;
+                    int bottomRow = (entityBottom - 1) / TILESIZE;
+
+                    if (currentMap[topRow][(int) nextCol] != 0 || 
+                        currentMap[bottomRow][(int) nextCol] != 0) {
+                        collisionX = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    protected void applyPhysicsAndMovement() {
+        
+        updateCoordinates();
+        checkTilesCollisions();
+
+        // Applica la gravità se l'entità non sta saltando e non è su una superficie solida
+        if (!jumping && !falling && !collisionFloor) {
+            fall(); 
+        }
+
+        // Gestisce il movimento verticale (salto e caduta)
+        if (jumping) {
+            y -= jumpSpeed;
+            jumpSpeed -= GRAVITY;
+            if (jumpSpeed <= 0) {
+                jumping = false;
+                falling = true;
+                jumpSpeed = defaultJumpSpeed;
+            }
+        } else if (falling) {
+            fallSpeed = (float) Math.min(fallSpeed + GRAVITY, MAX_FALL_SPEED);
+            y += fallSpeed;
+        }
+
+        // Gestisce il movimento orizzontale
+        if (moving && !collisionX) {
+            x += (xDirection == DirectionX.LEFT ? -speed : speed);
+        }
+    }
+    
+    // --- METODI ASTRATTI (da implementare nelle sottoclassi) ---
+    public abstract String getName();
+    public abstract void jump();
+    public abstract void attack();
+    public abstract void die();
+    
+    // --- METODI CONCRETI COMUNI (ereditati da tutti) ---
+    public void move(DirectionX dir) {
+        if (!moving) this.moving = true;
+        this.xDirection = dir;
+    }
+
+    public void stopMoving() {
+        this.moving = false;
+    }
+    
+    public void stopAttacking() {
+        this.attacking = false;
+    }
+    
+    protected void fall() {
+        if (!this.jumping) {
+            this.falling = true;
+        }
+    }
+    
+    protected void updateAnimeCounter() {
+    	
+    	if (counterTC > animationSpeed) {
+    		spriteIdx++;
+    		counterTC = 0;
+    	}
+    	
+    	counterTC++;
+    }
+
+    public int getBottomY() {
+        if (hitbox == null) return y;
+        return this.y + this.hitbox.y + this.hitbox.height;
+    }
+
+    public int getCenterX() {
+        if (hitbox == null) return x;
+        return this.x + this.hitbox.x + (this.hitbox.width / 2);
+    }
+    
+    public int getX() { return x; }
+    public int getY() { return y; }
+    public void setX(int x) { this.x = x; }
+    public void setY(int y) { this.y = y; }
+    public Rectangle getHitbox() { return hitbox; }
+    public DirectionX getDirection() { return xDirection; }
+    public boolean isJumping() { return jumping; }
+    public boolean isFalling() { return falling; }
+    public boolean isDrying() { return dying; }
+    public boolean isPositioning() { return positioning; }
+    
+    public void takePosition() { this.positioning = true; }
+    
+    // Drawable methods
+    
+    @Override
+    public String getDirectionData() { return xDirection.toString(); }
+    
+    @Override
+    public String getActionData() {
+        if (positioning) return "INSIDE BUBBLE";
+        // if (poppin_bubble) return "POPPING BUBBLE";
+        if (dying) return "DYING";
+        if (attacking) return "ATTACKING";
+        if (jumping) return "JUMPING";
+        if (falling) return "FALLING";
+        if (moving) return "WALKING";
+        return "IDLING";
+    }
+    
+
+	@Override
+	public int getTickCounter() {return counterTC;}
+
+	@Override
+	public int getSpriteIdx() {return spriteIdx;}
+
+	@Override
+	public int getAnimationSpeed() {return animationSpeed;}
+
+}-e 
+--next class--
+
+package model.entities.enemies;
+
+import static constants.Constants.*;
+import java.awt.Rectangle;
+import model.ai.EnemyAIService;
+import model.managers.AudioManager;
+import model.managers.PlayersManager;
+import model.managers.ProjectilesManager;
+import model.managers.TilesManager;
+import model.utils.DirectionX;
+
+public class Maita extends Enemy {
+
+    private final PlayersManager playersManager;
+    private final ProjectilesManager projectilesManager;
+    private final EnemyAIService aiService;
+
+    public Maita(int x, int y, TilesManager tilesManager, PlayersManager playersManager,
+                 ProjectilesManager projectilesManager, EnemyAIService aiService, AudioManager audioManager) {
+        super(x, y, tilesManager, audioManager);
+        this.playersManager = playersManager;
+        this.projectilesManager = projectilesManager;
+        this.aiService = aiService;
+        this.hitbox = new Rectangle(10, 3, TILESIZE * 2 - 20, TILESIZE * 2 - 6);
+        setDefaultValues();
+    }
+
+    private void setDefaultValues() {
+        speed = 2;
+        defaultJumpSpeed = 10;
+        jumpSpeed = 10;
+        fallSpeed = 0;
+        xControlTC = random.nextInt(0, 180);
+        closerPlayer = playersManager.getP1();
+        scoreValue = 300;
+    }
+
+    @Override
+    protected void handleAI() {
+        attackControlTC--;
+        chosePlayerTC++;
+        xControlTC++;
+        yControlTC++;
+
+        if (attackControlTC <= 0) {
+            boolean attacked = aiService.manageAttack(this, closerPlayer);
+            attackControlTC = attacked ? 100 : 10;
+        }
+
+        if (chosePlayerTC > 300) {
+            closerPlayer = aiService.getCloserPlayer(this);
+            chosePlayerTC = 0;
+        }
+
+        if (xControlTC > 30 && !freezedInputs) {
+            aiService.moveEnemyX(this, closerPlayer);
+            xControlTC = 0;
+        }
+
+        if (yControlTC > 20) {
+            aiService.moveEnemyY(this, closerPlayer);
+            yControlTC = 0;
+        }
+    }
+    
+    // Drawable methods
+
+    @Override
+    public String getName() { return "MAITA"; }
+    @Override
+    public String getTypeData() { return "MAITA"; }
+	@Override
+	public boolean isFlashing() { return false; }
+
+}
+-e 
+--next class--
+
+package model.entities.enemies;
+
+import static constants.Constants.*;
+
+import java.awt.Point;
+import model.entities.Entity;
+import model.entities.players.Player;
+import model.managers.AudioManager;
+import model.managers.TilesManager;
+import model.SoundEffects;
+import model.utils.DirectionX;
+
+/**
+ * Classe base astratta per tutti i nemici del gioco (rifattorizzata).
+ * Eredita la fisica di base da Entity e definisce il comportamento comune dei nemici,
+ * come la logica di 'applyPhysicsAndMovement'.
+ */
+public abstract class Enemy extends Entity {
+
+    // Campi per lo stato specifico dei nemici
+    protected boolean canMove = true;
+    protected boolean freezedInputs;
+    protected boolean trapped;
+    protected boolean angry;
+    protected boolean readyToRemove;
+    protected boolean shouldDropFoodOnDeath = false;
+    protected int scoreValue;
+
+    // Campi per l'Intelligenza Artificiale
+    protected Player closerPlayer;
+    protected int attackControlTC;
+    protected int xControlTC = 50;
+    protected int yControlTC;
+    protected int chosePlayerTC = 300;
+    
+    /**
+     * Costruttore della classe Enemy.
+     * Chiama il costruttore della classe genitore 'Entity' per gestire le dipendenze comuni
+     * e poi inizializza i campi specifici di questa classe.
+     */
+    public Enemy(int x, int y, TilesManager tilesManager, AudioManager audioManager) {
+        // Passa le dipendenze comuni al costruttore della classe genitore
+        super(tilesManager, audioManager);
+        
+        // Inizializza le coordinate e lo spawn point
+        this.x = x * TILESIZE;
+        this.y = y * TILESIZE;
+        this.spawnPoint = new Point(this.x, this.y);
+        this.positioning = true;
+    }
+
+    // --- LOGICA DI GIOCO PRINCIPALE ---
+    
+    @Override
+    public void update() {
+    	super.update();
+        if (positioning) { positioningUpdate(); return; }
+        if (!canMove) return;
+        if (dying) { dyingUpdate(); return; }
+
+        handleAI();
+        applyPhysicsAndMovement();
+    }
+
+
+    protected void applyPhysicsAndMovement() {
+        // 1. Chiama il metodo della classe base per la fisica.
+        super.applyPhysicsAndMovement();
+
+        // 2. Aggiunge solo la logica specifica del Nemico.
+        if (collisionX) {
+            changeXDirection();
+        }
+    }
+
+    /**
+     * Le sottoclassi concrete (ZenChan, etc.) devono ancora fornire la loro
+     * intelligenza artificiale specifica, quindi questo rimane abstract.
+     */
+    protected abstract void handleAI();
+
+    // --- ALTRI METODI ---
+
+    @Override
+    public void jump() {
+        if (collisionFloor && !falling) {
+            this.jumping = true;
+        }
+    }
+
+    @Override
+    public void attack() {
+        this.attacking = true;
+    }
+
+    @Override
+    public void die() {
+        dying = true;
+        jump();
+        audioManager.playSound(SoundEffects.ENEMY_DEATH);
+    }
+    
+    @Override
+    public void takePosition() {
+        super.takePosition(); // Chiama il metodo base che imposta positioning = true
+        if (spawnPoint != null) {
+            this.x = this.spawnPoint.x;
+            this.y = -TILESIZE * 2; // Lo posiziona sopra lo schermo
+        }
+    }
+
+    @Override
+    protected void positioningUpdate() {
+        if (spawnPoint == null) {
+            this.positioning = false;
+            return;
+        }
+        
+        moveToSpawnPoint();
+        if (inSpawnPosition()) {
+        	positioning = false;
+        }
+        
+        
+    }
+
+    @Override
+    protected void moveToSpawnPoint() { 
+    	if (y < spawnPoint.y) y = Math.min(y + speed, spawnPoint.y);
+     	else if (y > spawnPoint.y) y = Math.max(y - speed, spawnPoint.y);
+    }
+
+    protected void dyingUpdate() {
+        collisionX = false;
+        collisionFloor = false;
+
+        updateCoordinates();
+        checkDyingCollisions(); // checkDyingCollisions è specifico per l'animazione di morte, lo teniamo qui
+
+        if (collisionFloor) {
+            readyToRemove = true;
+            shouldDropFoodOnDeath = true;
+            return;
+        }
+
+        if (collisionX) changeXDirection();
+        if (!jumping && !falling && !collisionFloor) fall();
+
+        if (jumping) {
+            jumpSpeed -= GRAVITY;
+            y -= jumpSpeed;
+            if (jumpSpeed <= 0) {
+                jumping = false;
+                falling = true;
+                jumpSpeed = defaultJumpSpeed;
+            }
+        } else if (falling) {
+            fallSpeed += GRAVITY;
+            y += fallSpeed;
+        }
+
+        if (xDirection == DirectionX.LEFT) x -= speed;
+        else x += speed;
+    }
+
+    protected void changeXDirection() {
+        xDirection = (xDirection == DirectionX.RIGHT) ? DirectionX.LEFT : DirectionX.RIGHT;
+        collisionX = false;
+    }
+
+    // Questo metodo è specifico per la fisica della morte, quindi rimane qui
+    public void checkDyingCollisions() {
+        if (falling) {
+            final int[][] tileMap = tilesManager.getMap();
+            
+            double nextBottomRow = (getBottomY() + fallSpeed + GRAVITY) / TILESIZE;
+            if (nextBottomRow >= MAXSCREENROW) {
+                collisionFloor = true;
+            } else if (nextBottomRow >= 0){
+                double leftCol = (getX() + hitbox.x) / TILESIZE;
+                double rightCol = (getX() + hitbox.x + hitbox.width - 1) / TILESIZE;
+                if (tileMap[(int)nextBottomRow][(int)leftCol] != 0 ||
+                    tileMap[(int)nextBottomRow][(int)rightCol] != 0) {
+                    collisionFloor = true;
+                }
+            }
+        }
+    }
+    
+    public void freezeInputs() {
+        this.freezedInputs = true;
+    }
+
+    public void unfreezeInputs() {
+        this.freezedInputs = false;
+    }
+
+    public boolean shouldDropFoodOnDeath() { return shouldDropFoodOnDeath; }
+    public boolean isAttackable() { return !(trapped || dying); }
+    public boolean isReadyToRemove() { return readyToRemove; }
+    public void canMove(boolean b) { this.canMove = b; }
+    public void getMad() { angry = true; speed += 3; }
+    public void trapped() { this.trapped = true; }
+    public int getScore() { return this.scoreValue; }
+
+    // Drawable methods
+    
+    @Override
+    public String getActionData() {
+        if (dying) return "DYING";
+        if (jumping || falling) return angry ? "ANGRY JUMPING" : "JUMPING";
+        if (moving) return angry ? "ANGRY MOVING" : "MOVING";
+        return "IDLING";
+    }
+}-e 
+--next class--
+
+package model.entities.enemies;
+
+import static constants.Constants.*;
+import java.awt.Rectangle;
+
+import model.managers.AudioManager;
+import model.managers.TilesManager;
+import model.utils.DirectionX;
+import model.utils.DirectionY;
+
+public class Monsta extends Enemy {
+
+    private boolean collisionY;
+    private DirectionY yDirection = DirectionY.UP;
+
+    public Monsta(int x, int y, TilesManager tilesManager, AudioManager audioManager) {
+        super(x, y, tilesManager, audioManager);
+        this.hitbox = new Rectangle(5, 10, TILESIZE * 2 - 10, TILESIZE * 2 - 11);
+        setDefaultValues();
+    }
+
+    private void setDefaultValues() {
+        speed = 2;
+        scoreValue = 200;
+    }
+
+    @Override
+    protected void handleAI() {
+        // Monsta non ha IA
+    }
+    
+ // In Monsta.java
+
+    @Override
+    protected void checkTilesCollisions() {
+        // Monsta ha una logica di collisione personalizzata per il suo movimento a "rimbalzo".
+        int[][] currentMap = tilesManager.getMap();
+
+        // --- Controllo Orizzontale (Muri) ---
+        double nextCol;
+        if (xDirection == DirectionX.RIGHT) {
+            nextCol = (entityRight + speed) / (double) TILESIZE;
+        } else { // LEFT
+            nextCol = (entityLeft - speed) / (double) TILESIZE;
+        }
+
+        if (nextCol < 0 || nextCol >= MAXSCREENCOL) {
+            collisionX = true; // Colpito bordo schermo
+        } else {
+            int topRow = entityTop / TILESIZE;
+            int bottomRow = (entityBottom - 1) / TILESIZE;
+            if (currentMap[topRow][(int) nextCol] != 0 || 
+                currentMap[bottomRow][(int) nextCol] != 0) {
+                collisionX = true;
+            }
+        }
+
+        // --- Controllo Verticale (Pavimento e Soffitto) ---
+        double nextRow;
+        if (yDirection == DirectionY.DOWN) {
+            nextRow = (entityBottom + speed) / (double) TILESIZE;
+        } else { // UP
+            nextRow = (entityTop - speed) / (double) TILESIZE;
+        }
+
+        if (nextRow < 0 || nextRow >= MAXSCREENROW) {
+            collisionY = true; // Colpito bordo schermo
+        } else {
+            int leftCol = entityLeft / TILESIZE;
+            int rightCol = (entityRight - 1) / TILESIZE;
+            if (currentMap[(int) nextRow][leftCol] != 0 || 
+                currentMap[(int) nextRow][rightCol] != 0) {
+                collisionY = true;
+            }
+        }
+    }
+
+    @Override
+    protected void applyPhysicsAndMovement() {
+        collisionX = false;
+        collisionY = false;
+
+        updateCoordinates();
+        checkTilesCollisions();
+
+        if (collisionX) changeXDirection();
+        if (collisionY) changeYDirection();
+
+        y += (yDirection == DirectionY.UP ? -speed : speed);
+        x += (xDirection == DirectionX.LEFT ? -speed : speed);
+    }
+
+    protected void changeYDirection() {
+        yDirection = (yDirection == DirectionY.UP) ? DirectionY.DOWN : DirectionY.UP;
+        collisionY = false;
+    }
+
+    @Override
+    public String getName() { return "MONSTA"; }
+    @Override
+    public String getTypeData() { return "MONSTA"; }
+    @Override
+    public boolean isFlashing() { return false; }
+}
+-e 
+--next class--
+
+package model.entities.enemies;
+
+import static constants.Constants.*;
+import java.awt.Rectangle;
+import model.ai.EnemyAIService;
+import model.managers.AudioManager;
+import model.managers.PlayersManager;
+import model.managers.TilesManager;
+
+public class ZenChan extends Enemy {
+
+    private final PlayersManager playersManager;
+    private final EnemyAIService aiService;
+
+    public ZenChan(int x, int y, TilesManager tilesManager, PlayersManager playersManager, EnemyAIService aiService, AudioManager audioManager) {
+        super(x, y, tilesManager, audioManager);
+        this.playersManager = playersManager;
+        this.aiService = aiService;
+        this.hitbox = new Rectangle(5, 10, TILESIZE * 2 - 10, TILESIZE * 2 - 11);        
+        setDefaultValues();
+    }
+
+    private void setDefaultValues() {
+        speed = 3;
+        defaultJumpSpeed = 10;
+        jumpSpeed = 10;
+        fallSpeed = 0;
+        yControlTC = random.nextInt(0, 180);
+        closerPlayer = playersManager.getP1();
+        scoreValue = 100;
+    }
+
+    @Override
+    protected void handleAI() {
+        chosePlayerTC++;
+        xControlTC++;
+        yControlTC++;
+
+        if (chosePlayerTC > 300) {
+            closerPlayer = aiService.getCloserPlayer(this);
+            chosePlayerTC = 0;
+        }
+
+        if (xControlTC > 40 && !freezedInputs) {
+            aiService.moveEnemyX(this, closerPlayer);
+            xControlTC = 0;
+        }
+
+        if (yControlTC > 120) {
+            aiService.moveEnemyY(this, closerPlayer);
+            yControlTC = 0;
+        }
+    }
+
+    @Override
+    public String getName() { return "ZENCHAN"; }
+    @Override
+    public String getTypeData() { return "ZENCHAN"; }
+	@Override
+	public boolean isFlashing() { return false;	}
+	
+	@Override
+    public String getActionData() {
+        if (dying) return "DYING";
+        if (moving) return angry ? "ANGRY MOVING" : "MOVING";
+        return "IDLING";
+    }
+
+}
+-e 
+--next class--
+
+package model.entities.players;
+
+import static constants.Constants.*;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.util.ArrayList;
+import java.util.HashMap;
+import model.SoundEffects;
+import model.entities.Entity;
+import model.entities.PowerUp;
+import model.entities.PowerUpType;
+import model.managers.AudioManager;
+import model.managers.BubblesManager;
+import model.managers.LevelManager;
+import model.managers.MinorEventsManager;
+import model.managers.ScoreManager;
+import model.managers.TilesManager;
+import model.utils.DirectionX;
+
+public class Player extends Entity {
+	
+	private static final int DEFAULT_FIRE_RATE = 10;
+
+    private final ScoreManager score;
+    private final String user;
+    private int lives = 3;
+
+    private final BubblesManager bubblesManager;
+    private final MinorEventsManager minorEventsManager;
+    private final LevelManager levelManager;
+    
+    private boolean poppinBubble = false;
+    private int poppinTC = 0;
+    
+    private boolean stopAttacking;
+    private boolean canDie = true;
+    private boolean collisionOnBubble;
+    private int immortalityTC, dyingTC, attackTC = DEFAULT_FIRE_RATE, fireRate = DEFAULT_FIRE_RATE;
+    
+    // Contatori per la logica di gioco
+    private int bubblesCounter = 0;
+    private int specialBubblesCounter = 0;
+    private long stepsCounter = 0;
+    private int blueCandyCounter = 0, yellowCandyCounter = 0, pinkCandyCounter = 0;
+
+    // Power-ups attivi
+    private final HashMap<PowerUpType, PowerUp> activePowerUps;
+    
+    public Player(String user, BubblesManager bubblesManager, MinorEventsManager minorEventsManager,
+                  LevelManager levelManager, TilesManager tilesManager, AudioManager audioManager) {
+        super(tilesManager, audioManager);
+        this.user = user;
+        this.score = new ScoreManager();
+        this.activePowerUps = new HashMap<>();
+        this.bubblesManager = bubblesManager;
+        this.minorEventsManager = minorEventsManager;
+        this.levelManager = levelManager;
+        setDefaultValues();
+    }
+
+    private void setDefaultValues() {
+        switch (user) {
+            case "bub" -> { spawnPoint = new Point(6 * TILESIZE, 18 * TILESIZE); xDirection = DirectionX.RIGHT; }
+            case "bob" -> { spawnPoint = new Point(26 * TILESIZE, 18 * TILESIZE); xDirection = DirectionX.LEFT; }
+        }
+        x = spawnPoint.x;
+        y = spawnPoint.y;
+        hitbox = new Rectangle(7, 10, TILESIZE * 2 - 14, TILESIZE * 2 - 10);
+        speed = 10;
+        defaultJumpSpeed = 20;
+        jumpSpeed = 20;
+        fallSpeed = 0;
+        canDie = true;
+    }
+
+    @Override
+    public void update() {    	
+    	super.update();
+    	
+    	if (!hasLives()) return; 
+
+        if (positioning) { positioningUpdate(); return; }
+        if (dying) { dyingUpdate(); return; }
+        playingUpdate();
+    }
+
+    private void playingUpdate() {
+        if (!canDie) {
+            immortalityTC++;
+            if (immortalityTC > 120) { canDie = true; immortalityTC = 0; }
+        }
+        applyPhysicsAndMovement();
+        
+        
+        if (attacking) {
+        	attackTC++;
+            if (attackTC >= fireRate) {
+                bubblesManager.createPlayerBubble(this);
+                attackTC = 0;
+                bubblesCounter++;
+                specialBubblesCounter++;
+                if (hasRubyRing()) addScore(100);
+            }
+        }
+        if (stopAttacking) { attacking = false; stopAttacking = false; }
+        updatePowerUps();
+    }
+    
+    @Override
+    protected void positioningUpdate() {
+        moveToSpawnPoint();
+
+        if (poppinBubble) {
+        	if ( poppinTC > animationSpeed * 4) {
+        		positioning = false;
+        		poppinBubble = false;
+        		canDie = false;
+        		poppinTC = 0;
+        	}
+        	poppinTC++;
+        }
+        
+        else if (inSpawnPosition()) {
+        	poppinBubble = true;
+        }
+    }
+
+
+    protected void applyPhysicsAndMovement() {
+        super.applyPhysicsAndMovement();
+
+        if (moving && !collisionX) {
+            stepsCounter++;
+            if (hasCrystalRing()) addScore(10);
+        }
+        
+    }
+
+    private void updatePowerUps() {
+        activePowerUps.values().forEach(PowerUp::tick);
+        activePowerUps.entrySet().removeIf(entry -> {
+            if (entry.getValue().isExpired()) {
+                endPowerUp(entry.getKey());
+                return true;
+            }
+            return false;
+        });
+    }
+    
+    @Override
+    public void takePosition() {
+        this.positioning = true;
+    }
+
+    
+    @Override
+	public void jump() {
+		if ((!falling && collisionFloor) || (falling && collisionOnBubble)) {
+			jumping=true;
+            audioManager.playSound(SoundEffects.JUMP);
+            if (hasAmethystRing()) addScore(500);
+        }
+    }
+
+    @Override
+    public void attack() {
+        attacking = true;
+        audioManager.playSound(SoundEffects.BUBBLE);
+    }
+    
+    @Override
+    public void stopAttacking() {
+        this.attacking = false;
+        this.attackTC = fireRate;
+    }
+
+    @Override
+    public void die() {
+        if (canDie) {
+            dying = true;
+            audioManager.playSound(SoundEffects.DEATH);
+        }
+    }
+
+    public void bounceOnBubble() {
+        this.fallSpeed = 0;
+        this.falling = false;
+        jump();
+    }
+
+    public void setCollisionOnBubble(boolean onBubble) {
+        this.collisionOnBubble = onBubble;
+    }
+
+    public void addScore(int value) {
+        score.addScore(value);
+        minorEventsManager.createScoreEvent(x, y, "SCORE", user, value);
+    }
+
+    public void activatePowerUp(PowerUpType type) {
+        // Questo primo switch è corretto
+        switch (type) {
+            case CLOCK -> { levelManager.setClock(); audioManager.playSound(SoundEffects.ITEM); return; }
+            case DYNAMITE -> { levelManager.setDynamite(); audioManager.playSound(SoundEffects.ITEM); return; }
+            default -> {}
+        }
+
+        // Anche questo è corretto
+        int duration = switch (type) {
+            case PINK_CANDY, BLUE_CANDY, YELLOW_CANDY -> 15;
+            case SHOES, CRYSTAL_RING, AMETHYST_RING, RUBY_RING -> 10;
+            default -> 0;
+        };
+        if (duration == 0) return;
+
+        switch (type) {
+            case PINK_CANDY -> pinkCandyCounter++;
+            case BLUE_CANDY -> blueCandyCounter++;
+            case YELLOW_CANDY -> {
+                yellowCandyCounter++;
+                fireRate = 7;
+            }
+            case SHOES -> speed = 6;
+            default -> {} 
+        }
+
+        if (activePowerUps.containsKey(type)) {
+            activePowerUps.get(type).reset();
+        } else {
+            activePowerUps.put(type, new PowerUp(duration * FPS));
+        }
+        audioManager.playSound(SoundEffects.ITEM);
+    }
+
+    private void dyingUpdate() {
+        dyingTC++;
+        if (dyingTC > 120) {
+            lives--;
+            dying = false;
+            dyingTC = 0;
+            if (lives > 0) takePosition();
+        }
+    }
+
+    public void resetPowerUps() {
+        new ArrayList<>(activePowerUps.keySet()).forEach(this::endPowerUp);
+        activePowerUps.clear();
+    }
+
+    public void endPowerUp(PowerUpType type) { 
+        switch (type) {
+            case YELLOW_CANDY -> fireRate = DEFAULT_FIRE_RATE;
+            case SHOES -> speed = 4;
+            default -> {}
+        }
+    }
+
+    public void resetCounters() {
+        bubblesCounter = 0;
+        specialBubblesCounter = 0;
+        stepsCounter = 0;
+        blueCandyCounter = 0;
+        yellowCandyCounter = 0;
+        pinkCandyCounter = 0;
+    }
+
+    public void resetBubblesCounter() { bubblesCounter = 0; }
+    public void resetSpecialBubblesCounter() { specialBubblesCounter = 0; }
+    public void resetStepCounter() { stepsCounter = 0; }
+    public void resetCandyCounter(PowerUpType color) {
+        switch(color) {
+            case BLUE_CANDY : blueCandyCounter = 0;
+            case YELLOW_CANDY : yellowCandyCounter = 0;
+            case PINK_CANDY : pinkCandyCounter = 0;
+		default:
+			break;
+        }
+    }
+
+    // --- GETTERS ---
+    public int getScore() { return score.getScore(); }
+    public int getLives() { return lives; }
+    public boolean hasLives() { return lives > 0; }
+    public boolean canDie() { return canDie; }
+    public int getBubblesCounter() { return bubblesCounter; }
+    public int getSpecialBubblesCounter() { return specialBubblesCounter; }
+    public long getStepCounter() { return stepsCounter; }
+    public int getCandyCounter(PowerUpType candyType) {
+        return switch(candyType) {
+            case BLUE_CANDY -> blueCandyCounter;
+            case YELLOW_CANDY -> yellowCandyCounter;
+            case PINK_CANDY -> pinkCandyCounter;
+            default -> 0; 
+        };
+    }
+    
+    public boolean hasPinkCandy() { 
+        return activePowerUps.containsKey(PowerUpType.PINK_CANDY); 
+    }
+        
+    public boolean hasBlueCandy() { 
+        return activePowerUps.containsKey(PowerUpType.BLUE_CANDY); 
+    }
+        
+    public boolean hasYellowCandy() { 
+        return activePowerUps.containsKey(PowerUpType.YELLOW_CANDY); 
+    }
+        
+    public boolean hasCrystalRing() { 
+        return activePowerUps.containsKey(PowerUpType.CRYSTAL_RING); 
+    }
+        
+    public boolean hasAmethystRing() { 
+        return activePowerUps.containsKey(PowerUpType.AMETHYST_RING); 
+    }
+        
+    public boolean hasRubyRing() { 
+        return activePowerUps.containsKey(PowerUpType.RUBY_RING); 
+    }
+    
+    public boolean moving() {
+        return this.moving;
+    }
+    
+    public boolean isDying() {
+    	return this.dying;
+    }
+
+    // --- METODI INTERFACCIA Drawable ---
+    @Override
+    public String getName() { return user; }
+    @Override
+    public String getTypeData() { return user; }
+    @Override
+    public String getActionData() {
+    	if (poppinBubble) return "POPPING BUBBLE";
+        if (positioning) return "INSIDE BUBBLE";
+        if (dying) return "DYING";
+        if (attacking) return "ATTACKING";
+        if (jumping) return "JUMPING";
+        if (falling) return "FALLING";
+        if (moving) return "WALKING";
+        return "IDLING";
+    }
+    @Override
+    public boolean isFlashing() {
+        return !canDie && (immortalityTC % 10 < 5);
+    }
+    @Override
+    public String getDirectionData() {
+        return xDirection.toString();
+    }    
+    
+}-e 
+--next class--
+
+package model.entities;
+
+public enum PowerUpType {
+    // Candies
+    PINK_CANDY,
+    BLUE_CANDY,
+    YELLOW_CANDY,
+    
+    // Items
+    SHOES,
+    CLOCK,
+    DYNAMITE,
+    
+    // Rings
+    CRYSTAL_RING,
+    AMETHYST_RING,
+    RUBY_RING
+}-e 
+--next class--
+
+package model.entities;
+
+public class PowerUp {
+    private final int durationTicks;
+    private int currentTick;
+
+    public PowerUp(int durationTicks) {
+        this.durationTicks = durationTicks;
+        this.currentTick = 0;
+    }
+
+    public void tick() {
+        if (currentTick < durationTicks) currentTick++;
+    }
+
+    public boolean isExpired() {
+        return currentTick >= durationTicks;
+    }
+
+    public void reset() {
+        currentTick = 0;
+    }
+}
+
+-e 
+--next class--
+
+package model;
+
+import model.ai.EnemyAIService;
+import model.interfaces.Updatable;
+import model.managers.*;
+import model.states.StateManager;
+import model.users.SavingsManager;
+import model.users.UserDatas;
+import model.utils.MinorEvent;
+import view.interfaces.EntityListener;
+import view.interfaces.GameStateListener;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class GameModel {
+
+    private final StateManager stateManager;
+    private final PlayersManager playersManager;
+    private final BubblesManager bubblesManager;
+    private final TilesManager tilesManager;
+    private final ItemsManager itemsManager;
+    private final EnemiesManager enemiesManager;
+    private final MinorEventsManager minorEventsManager;
+    private final LevelManager levelManager;
+    private final ProjectilesManager projectilesManager;
+    private final StatisticsManager statisticsManager;
+    private final AudioManager audioManager;
+    private final CollisionManager collisionManager;
+    private final EnemyAIService aiService;
+    private final UserDatas userDatas;
+    private final SavingsManager savingsManager;
+
+    private EntityListener entityListener;
+    private final List<GameStateListener> gameStateListeners;
+    
+    private GameModel(GameModelBuilder builder) {
+        this.stateManager = builder.stateManager;
+        this.playersManager = builder.playersManager;
+        this.bubblesManager = builder.bubblesManager;
+        this.tilesManager = builder.tilesManager;
+        this.itemsManager = builder.itemsManager;
+        this.enemiesManager = builder.enemiesManager;
+        this.minorEventsManager = builder.minorEventsManager;
+        this.levelManager = builder.levelManager;
+        this.projectilesManager = builder.projectilesManager;
+        this.statisticsManager = builder.statisticsManager;
+        this.audioManager = builder.audioManager;
+        this.collisionManager = builder.collisionManager;
+        this.aiService = builder.aiService;
+        this.userDatas = builder.userDatas;
+        this.savingsManager = builder.savingsManager;
+        this.gameStateListeners = new ArrayList<>();
+    }
+
+    public static GameModelBuilder newBuilder() {
+        return new GameModelBuilder();
+    }
+    
+    public void update() {
+
+        switch (stateManager.getState()) {
+            case PLAYING -> {
+                levelManager.update();
+                itemsManager.update();
+                playersManager.update();
+                bubblesManager.update();
+                enemiesManager.update();
+                projectilesManager.update();
+                collisionManager.checkCollisions();
+            }
+            case STATS_MANAGEMENT -> statisticsManager.update();
+            default -> { /* altri stati non richiedono update */ }
+        }
+    }
+    
+    public void setEntityListener(EntityListener listener) { this.entityListener = listener; }
+    public void notifyEntityAdded(Updatable entity) { if (entityListener != null) entityListener.onEntityAdded(entity); }
+    public void notifyEntityRemoved(Updatable entity) { if (entityListener != null) entityListener.onEntityRemoved(entity); }
+    public void notifyMinorEvent(MinorEvent event) { if (entityListener != null) entityListener.onMinorEvent(event); }
+    
+    public void addGameStateListener(GameStateListener listener) {
+        this.gameStateListeners.add(listener);
+    }
+    
+    public void notifyLevelChangeStart(java.util.Stack<int[]> nextLevelRows) {
+        for (GameStateListener listener : gameStateListeners) {
+            listener.onLevelChangeStart(nextLevelRows);
+        }
+    }
+    
+    public void notifyGameStateChanged(model.states.GameStates newState) {
+        for (GameStateListener listener : gameStateListeners) {
+            listener.onGameStateChanged(newState);
+        }
+    }
+    
+    public StateManager getStateManager() { return stateManager; }
+    public PlayersManager getPlayersManager() { return playersManager; }
+    public StatisticsManager getStatisticsManager() { return statisticsManager; }
+    public MinorEventsManager getMinorEventsManager() { return minorEventsManager; }
+    public TilesManager getTilesManager() { return tilesManager; }
+    public ItemsManager getItemsManager() { return itemsManager; }
+    public LevelManager getLevelManager() { return levelManager; }
+    public BubblesManager getBubblesManager() { return bubblesManager; }
+    public EnemiesManager getEnemiesManager() { return enemiesManager; }
+    public ProjectilesManager getProjectilesManager() { return projectilesManager; }
+    public CollisionManager getCollisionManager() { return collisionManager; }
+    public AudioManager getAudioManager() { return audioManager; }
+    public EnemyAIService getAiService() { return aiService; }
+    public UserDatas getUserDatas() { return userDatas; }
+    public SavingsManager getSavingsManager() { return savingsManager; }
+    
+
+    // --- CLASSE BUILDER AGGIORNATA ---
+    public static class GameModelBuilder {
+    
+        private StateManager stateManager;
+        private PlayersManager playersManager;
+        private BubblesManager bubblesManager;
+        private TilesManager tilesManager;
+        private ItemsManager itemsManager;
+        private EnemiesManager enemiesManager;
+        private MinorEventsManager minorEventsManager;
+        private LevelManager levelManager;
+        private ProjectilesManager projectilesManager;
+        private StatisticsManager statisticsManager;
+        private AudioManager audioManager;
+        private CollisionManager collisionManager;
+        private EnemyAIService aiService;
+        private UserDatas userDatas;
+        private SavingsManager savingsManager;
+
+        private GameModelBuilder() {}
+
+        public GameModel build() {
+            // STADIO 1: Manager base (invariato)
+            this.audioManager = new AudioManager();
+            this.tilesManager = new TilesManager();
+            this.stateManager = new StateManager();
+            this.userDatas = new UserDatas();
+            this.savingsManager = new SavingsManager(userDatas);
+            this.projectilesManager = new ProjectilesManager(null, tilesManager);
+           
+            // STADIO 2: Manager principali (invariato)
+            this.minorEventsManager = new MinorEventsManager(null);
+            // Creiamo LevelManager passando 'null' per il GameModel per ora
+            this.levelManager = new LevelManager(null, null, null, tilesManager, null, null, minorEventsManager, projectilesManager, stateManager);
+            this.playersManager = new PlayersManager(null, null, minorEventsManager, levelManager, tilesManager, audioManager);
+            this.itemsManager = new ItemsManager(null, playersManager, tilesManager);
+            this.aiService = new EnemyAIService(playersManager);
+            this.enemiesManager = new EnemiesManager(null, playersManager, levelManager, itemsManager, tilesManager, projectilesManager, aiService, audioManager);
+            this.collisionManager = new CollisionManager(playersManager, enemiesManager, null, itemsManager, projectilesManager);
+            this.bubblesManager = new BubblesManager(null, tilesManager, minorEventsManager, collisionManager, enemiesManager, projectilesManager);
+            this.statisticsManager = new StatisticsManager(playersManager, userDatas, levelManager, stateManager, savingsManager);
+
+            // STADIO 3: Creazione istanza GameModel (invariato)
+            GameModel gameModel = new GameModel(this);
+            
+            // STADIO 4: Iniezione finale e cablaggio (MODIFICATO)
+            minorEventsManager.setGameModel(gameModel);
+            ((BaseManager<?>) projectilesManager).setGameModel(gameModel);
+            ((BaseManager<?>) playersManager).setGameModel(gameModel);
+            ((BaseManager<?>) itemsManager).setGameModel(gameModel);
+            ((BaseManager<?>) enemiesManager).setGameModel(gameModel);
+            ((BaseManager<?>) bubblesManager).setGameModel(gameModel);
+            
+            // --- NUOVA RIGA ---
+            // Ora iniettiamo il gameModel anche nel LevelManager
+            levelManager.setGameModel(gameModel);
+            
+            // Cablaggio finale (invariato)
+            levelManager.setPlayersManager(playersManager);
+            levelManager.setItemsManager(itemsManager);
+            levelManager.setEnemiesManager(enemiesManager);
+            levelManager.setBubblesManager(bubblesManager);
+            playersManager.setBubblesManager(bubblesManager);
+            collisionManager.setBubblesManager(bubblesManager);
+            stateManager.setGameModel(gameModel);
+            
+            return gameModel;
+        }
+    }
+}-e 
+--next class--
+
+package model;
+
+import model.interfaces.Updatable;
+
+public class GameObject implements Updatable{
+
+	@Override
+	public void update() {}
+
+}
+-e 
+--next class--
+
+package model.bubbles;
+
+public enum SpecialBubbleType {
+	FIRE,
+	THUNDER,
+	NONE;
+}
+-e 
+--next class--
+
+package model.bubbles;
+
+import model.utils.DirectionX;
+import model.entities.enemies.Enemy;
+import model.entities.players.Player;
+import model.managers.CollisionManager;
+import model.managers.EnemiesManager;
+import model.managers.MinorEventsManager;
+import model.managers.TilesManager;
+
+public class PlayerBubble extends Bubble {
+
+    private final Player owner;
+    private final EnemiesManager enemiesManager;
+
+    private boolean jumped;
+    private int jumpedTC;
+    private int projectileTC = 20;
+    private boolean trapping;
+    private Enemy trappedEnemy;
+    private int lifeTC = 600;
+    private boolean lifeTimerActive = false;
+
+    public PlayerBubble(Player owner, int x, int y, DirectionX direction, TilesManager tiles, 
+                        MinorEventsManager minorEvents, CollisionManager collisions, EnemiesManager enemies) {
+        super(x, y, tiles, minorEvents, collisions);
+        this.owner = owner;
+        this.enemiesManager = enemies;
+
+        this.direction = direction;
+        this.projectile = true;
+
+        checkPowerUps();
+    }
+
+    private void checkPowerUps() {
+        if (owner.hasPinkCandy()) projectileTC = 30;
+        if (owner.hasBlueCandy()) speed = 12;
+    }
+
+    @Override
+    public void update() {
+    	super.update();
+    	
+        resetCollisions();
+        updateCoordinates();
+        checkTilesCollisions();
+
+        // Logica per quando la bolla è ancora un PROIETTILE
+        if (projectile) {
+            projectileTC--;
+            if (projectileTC <= 0 || collisionLeft || collisionRight) {
+                // Se il tempo scade o colpisce un muro, smette di essere un proiettile
+                if (collisionLeft || collisionRight) {
+                    pop(); // Se colpisce un muro, scoppia subito
+                    return;
+                }
+                setBubble(); // Altrimenti, diventa una bolla normale
+            }
+            
+            // Movimento rettilineo da proiettile
+            x += (direction == DirectionX.LEFT ? -speed : speed);
+
+        } else {
+            // Logica per quando è una BOLLA FLUTTUANTE
+            // Le componenti verticale e orizzontale ora sono indipendenti.
+
+            // 1. Movimento Verticale: fluttua sempre verso l'alto se non c'è un ostacolo.
+            if (!collisionTop) {
+                y -= speed;
+            }
+
+            // 2. Movimento Orizzontale: fluttua sempre di lato, cambiando direzione ai muri.
+            setDirection(); // Decide la direzione in base alle collisioni
+            if (blocked) {
+                y += speed * 2; 
+                blocked = false;
+            } else {
+                x += (direction == DirectionX.LEFT ? -speed : speed);
+            }
+            
+         // Se la bolla sta intrappolando un nemico e il suo timer è attivo...
+            if (trapping && lifeTimerActive) {
+                lifeTC--; // ...decrementa il timer.
+                if (lifeTC <= 0) {
+                    popByTimeout(); // Se il tempo scade, scoppia da sola.
+                    return; // Ferma l'update per questo frame.
+                }
+            }
+            
+        }
+
+        // Logica per quando il giocatore salta sulla bolla 
+        if (jumped) {
+            jumpedTC--;
+            if (jumpedTC <= 0) {
+                jumped = false;
+            }
+        }
+    }
+
+
+
+    @Override
+    public void pop(Player popOwner) {
+        if (readyToRemove) return;
+
+        if (trapping && trappedEnemy != null) {
+            Player scorer = (popOwner != null) ? popOwner : this.owner;
+            scorer.addScore(trappedEnemy.getScore());
+            enemiesManager.releaseTrappedEnemy(trappedEnemy, x, y, true);
+        }
+
+        super.pop(popOwner);
+    }
+
+    @Override
+    public Player getOwner() { return owner; }
+
+    private void setBubble() {
+        projectile = false;
+        speed = 1;
+    }
+
+    @Override
+    public void setJumped() {
+        jumped = true;
+        jumpedTC = 60;
+    }
+
+    public void trap(Enemy enemy) {
+        setBubble();
+        trapping = true;
+        trappedEnemy = enemy;
+        enemiesManager.trapEnemy(enemy);
+        lifeTimerActive = true;
+    }
+    
+    public void popByTimeout() {
+        if (readyToRemove) return; // Se sta già per essere rimosso, non fare nulla
+
+        if (trapping && trappedEnemy != null) {
+        	trappedEnemy.setX(x);
+        	trappedEnemy.setY(y);
+            enemiesManager.releaseTrappedEnemy(trappedEnemy, x, y, false);
+        }
+
+        // Esegui il resto della logica di scoppio generica (effetto "POW", etc.)
+        // Passiamo 'null' perché nessun giocatore è proprietario di questa azione.
+        super.pop(null);
+    }
+
+    // --- View ---
+    public String getTypeData() { return owner.getName(); }
+    public String getActionData() { 
+    	if (projectile) return "PROJECTILE";
+    	else if (trapping) return "TRAPPING " + trappedEnemy.getTypeData();
+    	return "MOVING"; 
+    }
+    public String getDirectionData() { return null; }
+    public boolean isFlashing() { return false; }
+
+}
+-e 
+--next class--
+
+package model.bubbles;
+
+import static constants.Constants.*;
+import java.awt.Rectangle;
+import model.GameObject;
+import model.entities.players.Player;
+import model.interfaces.Collidable;
+import model.managers.CollisionManager;
+import model.managers.MinorEventsManager;
+import model.managers.TilesManager;
+import model.utils.DirectionX;
+import view.interfaces.Drawable;
+
+public abstract class Bubble extends GameObject implements Drawable, Collidable {
+    
+    protected int x, y;
+    protected Rectangle hitbox = new Rectangle(4, 2, TILESIZE * 2 - 8, TILESIZE * 2 - 4);
+    protected int speed = 5;
+    protected boolean projectile;
+    protected boolean readyToRemove = false;
+    protected boolean blocked;
+    protected DirectionX direction = DirectionX.RIGHT;
+
+    protected int bubbleLeft, bubbleRight, bubbleTop, bubbleBottom;
+    protected double bubbleLeftCol, bubbleRightCol, bubbleTopRow, bubbleBottomRow;
+    protected boolean collisionLeft, collisionRight, collisionTop;
+    protected int[][] tileMap;
+    
+    // Campi comuni per le animazioni
+    protected int counterTC = 0;
+    protected int spriteIdx = 0;
+    protected final int animationSpeed = 20;
+
+    protected final MinorEventsManager minorEventsManager;
+    protected final CollisionManager collisionManager;
+
+    public static final double EXPLOSION_RADIUS = 32.0;
+
+    public Bubble(int x, int y, TilesManager tilesManager, MinorEventsManager minorEventsManager, CollisionManager collisionManager) {
+        this.x = x;
+        this.y = y;
+        this.tileMap = tilesManager.getMap();
+        this.minorEventsManager = minorEventsManager;
+        this.collisionManager = collisionManager;
+    }
+
+    public void update() {
+        updateAnimeCounter();
+    }
+    
+    protected void updateAnimeCounter() {
+    	
+    	if (counterTC > animationSpeed) {
+    		spriteIdx++;
+    		counterTC = 0;
+    	}
+    	
+    	counterTC++;
+    }
+
+    public void pop(Player popOwner) {
+        if (readyToRemove) return;
+
+        readyToRemove = true;
+        minorEventsManager.createEvent(x, y, "POW");
+        collisionManager.triggerChainReaction(this);
+    }
+
+    public void pop() { pop(null); }
+
+    public Player getOwner() { return null; }
+
+    public void updateCoordinates() {
+        bubbleLeft = x + hitbox.x;
+        bubbleRight = x + hitbox.x + hitbox.width;
+        bubbleTop = y + hitbox.y;
+        bubbleBottom = y + hitbox.y + hitbox.height;
+
+        bubbleLeftCol = bubbleLeft / (double)TILESIZE;
+        bubbleRightCol = bubbleRight / (double)TILESIZE;
+        bubbleTopRow = bubbleTop / (double)TILESIZE;
+        bubbleBottomRow = bubbleBottom / (double)TILESIZE;
+    }
+
+    public void checkTilesCollisions() {
+        // Calcoliamo le coordinate base
+        int topRow = (int) bubbleTopRow;
+        int bottomRow = (int) bubbleBottomRow;
+        int leftCol = (int) bubbleLeftCol;
+        int rightCol = (int) bubbleRightCol;
+
+
+        if (topRow < 0 || bottomRow >= MAXSCREENROW || leftCol < 0 || rightCol >= MAXSCREENCOL) {
+            readyToRemove = true; // La marchiamo per la rimozione
+            return;
+        }
+
+        // --- CONTROLLI DI COLLISIONE (ORA SICURI) ---
+
+        // Sinistra
+        int nextLeftCol = Math.max((bubbleLeft - speed) / TILESIZE, 0);
+        if (tileMap[topRow][nextLeftCol] != 0 || tileMap[bottomRow][nextLeftCol] != 0) {
+            collisionLeft = true;
+        }
+
+        // Destra
+        int nextRightCol = Math.min((bubbleRight + speed) / TILESIZE, MAXSCREENCOL - 1);
+        if (tileMap[topRow][nextRightCol] != 0 || tileMap[bottomRow][nextRightCol] != 0) {
+            collisionRight = true;
+        }
+
+        // Alto
+        int nextTopRow = Math.max((bubbleTop - speed) / TILESIZE, 0);
+        // 'leftCol' e 'rightCol' sono sicuri perché li abbiamo controllati all'inizio.
+        if (tileMap[nextTopRow][leftCol] != 0 || tileMap[nextTopRow][rightCol] != 0) {
+            collisionTop = true;
+        }
+    }
+
+    public void handleBubbleCollision() {
+        if (direction == DirectionX.LEFT) direction = DirectionX.RIGHT;
+        else if (direction == DirectionX.RIGHT) direction = DirectionX.LEFT;
+    }
+
+    protected void changeDirection() {
+        if (collisionRight) direction = DirectionX.LEFT;
+        else if (collisionLeft) direction = DirectionX.RIGHT;
+    }
+
+    public void setDirection() {
+        if (collisionRight && collisionLeft) blocked = true;
+        else if (collisionRight ^ collisionLeft) changeDirection();
+    }
+
+    public void setJumped() {} // Override in PlayerBubble
+
+    public void resetCollisions() {
+        collisionLeft = false;
+        collisionRight = false;
+        collisionTop = false;
+    }
+
+    public int getX() { return x; }
+    public int getY() { return y; }
+    public Rectangle getHitbox() { return hitbox; }
+    public int getCenterX() { return x + hitbox.x + hitbox.width / 2; }
+    public int getCenterY() { return y + hitbox.y + hitbox.height / 2; }
+    public DirectionX getDirection() { return direction; }
+    public boolean isProjectile() { return projectile; }
+    public boolean isReadyToRemove() { return readyToRemove; }
+    
+	@Override
+	public int getTickCounter() {return counterTC;}
+
+	@Override
+	public int getSpriteIdx() {return spriteIdx;}
+
+	@Override
+	public int getAnimationSpeed() {return animationSpeed;}
+}
+-e 
+--next class--
+
+package model.bubbles;
+
+import static constants.Constants.*;
+import model.managers.MinorEventsManager;
+import model.managers.ProjectilesManager;
+import model.entities.players.Player;
+import model.managers.CollisionManager;
+import model.managers.TilesManager;
+import model.utils.DirectionX;
+
+public class SpecialBubble extends Bubble {
+
+    private final SpecialBubbleType bubbleType;
+    private final ProjectilesManager projectilesManager;
+
+    public SpecialBubble(int x, SpecialBubbleType bubbleType, TilesManager tiles, 
+                         MinorEventsManager minorEvents, CollisionManager collisions, ProjectilesManager projectiles) {
+        super(x, SCREENHEIGHT - TILESIZE * 2, tiles, minorEvents, collisions);
+        this.bubbleType = bubbleType;
+        this.projectilesManager = projectiles;
+        this.speed = 1;
+    }
+
+    @Override
+    public void update() {
+    	super.update();
+    	
+        resetCollisions();
+        updateCoordinates();
+        checkTilesCollisions();
+
+        // 1. Movimento Verticale: fluttua sempre verso l'alto se non c'è un ostacolo.
+        if (!collisionTop) {
+            y -= speed;
+        }
+
+        // 2. Movimento Orizzontale: fluttua sempre di lato, cambiando direzione ai muri.
+        setDirection();
+        if (blocked) {
+            y += speed * 2; // Logica originale per sbloccarsi
+            blocked = false;
+        } else {
+            x += (direction == DirectionX.LEFT ? -speed : speed);
+        }
+    }
+
+    @Override
+    public void pop(Player popOwner) {
+        if (readyToRemove) return;
+
+        projectilesManager.spawnProjectileFromBubble(this);
+        super.pop(popOwner);
+    }
+
+    public SpecialBubbleType getType() { return bubbleType; }
+
+    // --- View ---
+    public String getTypeData() { return bubbleType.toString(); }
+    public String getActionData() { return "MOVING"; }
+    public String getDirectionData() { return null; }
+    public boolean isFlashing() { return false; }
+}
+-e 
+--next class--
+
+package model.users;
+
+import java.io.Serializable;
+
+public class User implements Serializable{
+	
+	private static final long serialVersionUID = -7207853372977136677L;
+	
+	private int avatarIndex;
+	private String name;
+	private int score;
+	
+	
+	public User(int avatarIndex, String name, int score) {
+		
+		this.avatarIndex= avatarIndex;		
+		this.name= name;
+		this.score= score;
+	}
+	
+	public String getName() {
+		return name;
+	}
+	
+	public int getAvatarIndex() {
+		return avatarIndex;
+	}
+	
+	public int getScore() {
+		return score;
+	}
+	
+	
+}
+-e 
+--next class--
+
+package model.users; // <-- NUOVA POSIZIONE CONSIGLIATA
+
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+import model.managers.ScoreManager;
+
+/**
+ * Gestisce il salvataggio e il caricamento dei dati di gioco (rifattorizzato).
+ * Ora è un servizio che opera sull'istanza di UserDatas che riceve.
+ */
+public class SavingsManager {
+    
+    private static final String HIGHSCORE_FILE = "savingdatas/highestscore.txt";
+    private static final String USERS_FILE = "savingdatas/users.dat"; // Un unico file per tutti gli utenti
+
+    private final UserDatas userDatas;
+
+    /**
+     * Il costruttore riceve l'oggetto UserDatas su cui deve operare.
+     * @param userDatas Il gestore dei dati utente in memoria.
+     */
+    public SavingsManager(UserDatas userDatas) {
+        this.userDatas = userDatas;
+    }
+
+    /**
+     * Salva l'high score e la lista di utenti su file.
+     */
+    public void save() {
+        saveHighScore();
+        saveUsersList();
+    }
+
+    /**
+     * Carica l'high score e la lista di utenti dai file.
+     */
+    public void load() {
+        loadHighScore();
+        loadUsersList();
+    }
+
+    private void saveHighScore() {
+        // Usa try-with-resources per chiudere automaticamente lo stream
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(HIGHSCORE_FILE))) {
+            bw.write(String.valueOf(ScoreManager.getHighestScore()));
+        } catch (IOException e) {
+            System.err.println("Errore durante il salvataggio dell'high score.");
+            e.printStackTrace();
+        }
+    }
+    
+    private void saveUsersList() {
+        // Salva l'intera lista di utenti in un unico file binario
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(USERS_FILE))) {
+            oos.writeObject(new ArrayList<>(userDatas.getUsersList())); // Salva una copia
+        } catch (IOException e) {
+            System.err.println("Errore durante il salvataggio della lista utenti.");
+            e.printStackTrace();
+        }
+    }
+
+    private void loadHighScore() {
+        File file = new File(HIGHSCORE_FILE);
+        if (!file.exists()) return;
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String scoreStr = br.readLine();
+            if (scoreStr != null && !scoreStr.isBlank()) {
+                ScoreManager.setHighestScore(Integer.parseInt(scoreStr));
+            }
+        } catch (IOException | NumberFormatException e) {
+            System.err.println("Errore durante il caricamento dell'high score.");
+            e.printStackTrace();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadUsersList() {
+        File file = new File(USERS_FILE);
+        if (!file.exists()) return;
+
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
+            Object obj = ois.readObject();
+            if (obj instanceof List) {
+                userDatas.setUsersList((List<User>) obj);
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Errore durante il caricamento della lista utenti.");
+            e.printStackTrace();
+        }
+    }
+}-e 
+--next class--
+
+package model.users;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import static constants.Constants.*;
+
+/**
+ * Gestisce la collezione di utenti in memoria (rifattorizzata).
+ * Non è più un Singleton e opera su una lista di istanza.
+ */
+public class UserDatas implements Serializable { // Serializable per poter salvare l'intero oggetto
+    
+    private static final long serialVersionUID = 1L;
+    
+    // --- MODIFICATO ---
+    // La lista ora è un campo di istanza, non più statico.
+    private List<User> usersList;
+
+    public UserDatas() {
+        this.usersList = new ArrayList<>();
+    }
+
+    /**
+     * Aggiunge un nuovo utente, riordina la lista e la tronca se supera la dimensione massima.
+     * @param user L'utente da aggiungere.
+     */
+    private void addUserAndSort(User user) {
+        usersList.add(user);
+        
+        // Usa una lambda per un codice più moderno e compatto
+        usersList.sort(Comparator.comparingInt(User::getScore).reversed());
+        
+        if (usersList.size() > RANK_DIMENSION) {
+            // Crea una nuova lista con solo i primi N elementi
+            usersList = new ArrayList<>(usersList.subList(0, RANK_DIMENSION));
+        }
+    }
+
+    // --- Getters ---
+    public List<User> getUsersList() {
+
+        return Collections.unmodifiableList(usersList);
+    }
+    
+    // --- Setters ---
+    public void setUsersList(List<User> users) {
+        if (users != null) {
+            this.usersList = users;
+        }
+    }
+    
+    // --- Builder ---
+    // L'inner class non ha più bisogno di essere statica
+    public class UserBuilder {
+        private Integer avatarIndex;
+        private String name;
+        private Integer score;
+
+        public UserBuilder() {
+            // Il costruttore può essere vuoto
+        }
+
+        public UserBuilder setAvatarIndex(int avatarIndex) {
+            this.avatarIndex = avatarIndex;
+            return this; // Ritorna se stesso per il "chaining"
+        }
+
+        public UserBuilder setName(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public UserBuilder setScore(int score) {
+            this.score = score;
+            return this;
+        }
+
+        public User createUser() {
+            User user = new User(avatarIndex, name, score);
+            addUserAndSort(user); // Usa il metodo privato della classe esterna
+            return user;
+        }
+    }
+}-e 
+--next class--
+
