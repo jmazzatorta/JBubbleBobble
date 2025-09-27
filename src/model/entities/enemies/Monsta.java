@@ -37,7 +37,6 @@ public class Monsta extends Enemy {
 		collisionX= false;
 		collisionY= false;
 		
-		//Controllo collisioni
 		updateCoordinates();
 		checkTilesCollisions();
 		checkPlayerCollisions();
@@ -59,10 +58,8 @@ public class Monsta extends Enemy {
 
     @Override
     protected void checkTilesCollisions() {
-        // Monsta ha una logica di collisione personalizzata per il suo movimento a "rimbalzo".
         int[][] currentMap = tilesManager.getMap();
 
-        // --- Controllo Orizzontale (Muri) ---
         double nextCol;
         if (xDirection == DirectionX.RIGHT) {
             nextCol = (entityRight + speed) / (double) TILESIZE;
@@ -71,7 +68,7 @@ public class Monsta extends Enemy {
         }
 
         if (nextCol < 0 || nextCol >= MAXSCREENCOL) {
-            collisionX = true; // Colpito bordo schermo
+            collisionX = true; 
         } else {
             int topRow = entityTop / TILESIZE;
             int bottomRow = (entityBottom - 1) / TILESIZE;
@@ -81,7 +78,6 @@ public class Monsta extends Enemy {
             }
         }
 
-        // --- Controllo Verticale (Pavimento e Soffitto) ---
         double nextRow;
         if (yDirection == DirectionY.DOWN) {
             nextRow = (entityBottom + speed) / (double) TILESIZE;
@@ -90,7 +86,7 @@ public class Monsta extends Enemy {
         }
 
         if (nextRow < 0 || nextRow >= MAXSCREENROW) {
-            collisionY = true; // Colpito bordo schermo
+            collisionY = true; 
         } else {
             int leftCol = entityLeft / TILESIZE;
             int rightCol = (entityRight - 1) / TILESIZE;

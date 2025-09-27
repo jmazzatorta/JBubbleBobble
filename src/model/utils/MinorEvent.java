@@ -1,8 +1,7 @@
 package model.utils;
 
-import model.interfaces.Updatable;
 
-public class MinorEvent implements Updatable {
+public class MinorEvent  {
 
     private final int x, y, scoredPoints;
     private final String type, user;
@@ -21,8 +20,5 @@ public class MinorEvent implements Updatable {
     public String getType() { return type; }
     public int getScoredPoints() { return scoredPoints; }
 
-    @Override
-    public void update() {
-        // Nessuna logica, serve solo per compatibilità con MinorEventsManager
-    }
+    
 }

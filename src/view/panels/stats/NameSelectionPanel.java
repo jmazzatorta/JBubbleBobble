@@ -33,7 +33,7 @@ public class NameSelectionPanel extends JPanel {
         String typedString = statsManager.getTypedString();
         
         g2.setFont(font70);
-        String title = "Enter your name!";
+        String title = "enter your name!";
         int width = g2.getFontMetrics().stringWidth(title);
         g2.drawString(title, (SCREENWIDTH / 2) - (width / 2), TILESIZE * 6);
         

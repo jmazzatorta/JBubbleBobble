@@ -95,7 +95,6 @@ public class ItemsManager extends BaseManager<Item> {
     private void checkItemsConditions(Player p) {
         if (p == null) return;
 
-        // --- DROPPARE CANDIES ---
         if (p.getBubblesCounter() > 35) {
             int rand = random.nextInt(3);
             switch(rand) {
@@ -106,13 +105,11 @@ public class ItemsManager extends BaseManager<Item> {
             p.resetBubblesCounter();
         }
 
-        // --- DROPPARE SCARPE ---
         if (p.getStepCounter() > SCREENWIDTH * 10) {
             specialItemsFactory(PowerUpType.SHOES);
             p.resetStepCounter();
         }
 
-        // --- DROPPARE CLOCK / DYNAMITE ---
         if (p.getSpecialBubblesCounter() > 12) {
             if (random.nextInt(2) == 0) {
                 specialItemsFactory(PowerUpType.CLOCK);
@@ -122,7 +119,6 @@ public class ItemsManager extends BaseManager<Item> {
             p.resetSpecialBubblesCounter();
         }
 
-        // --- DROPPARE RINGS ---
         if (p.getCandyCounter(PowerUpType.BLUECANDY) > 2) {
             specialItemsFactory(PowerUpType.CRYSTALRING);
             p.resetCandyCounter(PowerUpType.BLUECANDY);
@@ -136,7 +132,6 @@ public class ItemsManager extends BaseManager<Item> {
 
     }
 
-    // --- BLOCK / UNBLOCK FACTORY ---
     public void blockFactory() { factoryBlocked = true; }
     public void unlockFactory() { factoryBlocked = false; }
 

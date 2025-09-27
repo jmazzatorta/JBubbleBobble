@@ -63,7 +63,6 @@ public class SpecialBubble extends Bubble {
 
     public SpecialBubbleType getType() { return bubbleType; }
 
-    // --- View ---
     public String getTypeData() { return bubbleType.toString(); }
     public String getActionData() { 
     	if (jumped) return "JUMPED";

@@ -45,10 +45,10 @@ public abstract class Projectile extends GameObject implements Collidable, Updat
         projectileTop = y + hitbox.y;
         projectileBottom = projectileTop + hitbox.height;
 
-        projectileLeftCol = projectileLeft / (double) TILESIZE;   // CORRETTO
-        projectileRightCol = projectileRight / (double) TILESIZE; // CORRETTO
-        projectileTopRow = projectileTop / (double) TILESIZE;     // CORRETTO
-        projectileBottomRow = projectileBottom / (double) TILESIZE; // CORRETTO
+        projectileLeftCol = projectileLeft / (double) TILESIZE;   
+        projectileRightCol = projectileRight / (double) TILESIZE;
+        projectileTopRow = projectileTop / (double) TILESIZE;   
+        projectileBottomRow = projectileBottom / (double) TILESIZE; 
     }
 
     protected abstract void checkTilesCollisions();

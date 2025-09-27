@@ -1,6 +1,6 @@
 package model.states;
 
-import model.GameModel; // Importa GameModel
+import model.GameModel; 
 
 public class StateManager {
     
@@ -11,7 +11,6 @@ public class StateManager {
         this.currentState = GameStates.INTRO; 
     }
 
-    // NUOVO: Metodo per l'iniezione del GameModel
     public void setGameModel(GameModel gameModel) {
         this.gameModel = gameModel;
     }
@@ -20,10 +19,6 @@ public class StateManager {
         return currentState;
     }
 
-    /**
-     * MODIFICATO: Ora questo metodo notifica anche il cambio di stato.
-     * @param newState il nuovo stato del gioco.
-     */
     public void setState(GameStates newState) {
         if (this.currentState != newState) {
             this.currentState = newState;

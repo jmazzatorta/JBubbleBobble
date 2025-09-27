@@ -259,7 +259,6 @@ public abstract class Enemy extends Entity {
     public void trapped() { this.trapped = true; }
     public int getScore() { return this.scoreValue; }
 
-    // Drawable methods
     
     @Override
     public String getActionData() {

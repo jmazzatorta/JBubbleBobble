@@ -24,7 +24,6 @@ import model.utils.DirectionX;
 
 public class Player extends Entity {
 	
-
     private final ScoreManager score;
     private final String user;
     private int lives = 3;
@@ -42,13 +41,11 @@ public class Player extends Entity {
     private int fireRate=15;
     private boolean stopAttacking;
     
-    // Contatori per la logica di gioco
     private int bubblesCounter = 0;
     private int specialBubblesCounter = 0;
     private long stepsCounter = 0;
     private int blueCandyCounter = 0, yellowCandyCounter = 0, pinkCandyCounter = 0;
 
-    // Power-ups attivi
     private final HashMap<PowerUpType, PowerUp> activePowerUps;
 
     
@@ -280,14 +277,12 @@ public class Player extends Entity {
     }
 
     public void activatePowerUp(PowerUpType type) {
-        // Questo primo switch è corretto
         switch (type) {
             case CLOCK -> { levelManager.setClock(); audioManager.playSound(SoundEffects.ITEM); return; }
             case DYNAMITE -> { levelManager.setDynamite(); audioManager.playSound(SoundEffects.ITEM); return; }
             default -> {}
         }
 
-        // Anche questo è corretto
         int duration = switch (type) {
             case PINKCANDY, BLUECANDY, YELLOWCANDY -> 15;
             case SHOES, CRYSTALRING, AMETHYSTRING, RUBYRING -> 10;
@@ -413,6 +408,7 @@ public class Player extends Entity {
     public String getTypeData() { return user; }
     @Override
     public String getActionData() {
+    	if (lives == 0) return "DEAD";
     	if (poppinBubble) return "POPPING BUBBLE";
         if (positioning) return "INSIDE BUBBLE";
         if (dying) return "DYING";

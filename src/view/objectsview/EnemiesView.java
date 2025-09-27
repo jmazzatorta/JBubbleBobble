@@ -10,10 +10,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.stream.Collectors;
 
-/**
- * Gestisce il caricamento e il disegno degli sprite dei nemici (rifattorizzata).
- * Carica le immagini nel costruttore e offre un metodo 'draw'.
- */
 public class EnemiesView {
 
 
@@ -32,12 +28,8 @@ public class EnemiesView {
     private final ArrayList<BufferedImage> sxMaitaAngryFalling, dxMaitaAngryFalling;
     private final ArrayList<BufferedImage> sxMaitaDying, dxMaitaDying;
 
-    /**
-     * Il costruttore pubblico carica e inizializza tutte le immagini.
-     */
     public EnemiesView() {
-        // La logica di caricamento è stata spostata qui dal vecchio metodo privato.
-        // Inizializziamo e assegniamo le liste una sola volta.
+
         ArrayList<String> imageNames = new ArrayList<>();
         ImageLoader.setPath("/enemies/");
         ImageLoader.setScaling(2);
@@ -128,9 +120,6 @@ public class EnemiesView {
         }
     }
 
-    /**
-     * Seleziona lo sprite corretto da disegnare in base al tipo, azione e direzione del nemico.
-     */
     private BufferedImage getSprite(DrawableWrapper wrapper) {
     	Drawable enemy = wrapper.getDrawable();
     	
@@ -148,8 +137,6 @@ public class EnemiesView {
         
         return images.get(wrapper.getCurrentFrame() % images.size());
     }
-
-    // --- METODI HELPER PER SELEZIONARE LA LISTA DI IMMAGINI CORRETTA ---
 
     private ArrayList<BufferedImage> getZenchanImages(Drawable enemy) {
         String direction = enemy.getDirectionData();

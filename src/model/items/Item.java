@@ -39,7 +39,7 @@ public abstract class Item extends GameObject implements Drawable, Collidable, U
         }
 
         updateCoordinates();
-        checkTilesCollisions(); // Questo metodo ora gestisce lo snap e la rimozione.
+        checkTilesCollisions(); 
         
         if (!floorCollision) {
             y += fallSpeed;
@@ -63,7 +63,6 @@ public abstract class Item extends GameObject implements Drawable, Collidable, U
             return;
         }
 
-        // Eseguiamo il controllo solo se siamo dentro i limiti della mappa
         if (entityBottomRow >= 0 && entityLeftCol >= 0 && entityRightCol < MAXSCREENCOL) {
             int tile1 = tileMap[(int)entityBottomRow][(int)entityLeftCol];
             int tile2 = tileMap[(int)entityBottomRow][(int)entityRightCol];
@@ -76,15 +75,11 @@ public abstract class Item extends GameObject implements Drawable, Collidable, U
         }
     }
 
-    // --- Getters ---
     public Rectangle getHitbox() { return hitbox; }
     public int getX() { return x; }
     public int getY() { return y; }
     public boolean isReadyToRemove() { return readyToRemove; }
 
-    // --- Drawable ---
-    
-    
     @Override
     public String getDirectionData() { return null; }
     

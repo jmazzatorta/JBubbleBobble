@@ -32,9 +32,8 @@ public class FinalizationPanel extends JPanel {
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2.setColor(Color.WHITE);
         
-        // --- Lettura dati dal View-Model ---
         User createdUser = statsManager.getCreatedUser();
-        if (createdUser == null) return; // Sicurezza nel caso in cui il pannello venga disegnato troppo presto
+        if (createdUser == null) return; 
 
         g2.setFont(font70);
         String title = "User created!";

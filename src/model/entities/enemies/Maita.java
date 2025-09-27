@@ -76,7 +76,6 @@ public class Maita extends Enemy {
         }
     }
     
-    // Drawable methods
 
     @Override
     public String getName() { return "MAITA"; }

@@ -67,7 +67,6 @@ public class PlayersManager extends BaseManager<Player> {
         addPlayer("bub");
     }
 
-    // --- Metodi delegati ---
     public void takePosition() {
         entities.forEach(Player::takePosition);
     }

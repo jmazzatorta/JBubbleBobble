@@ -15,55 +15,43 @@ import static constants.Constants.*;
 
 public abstract class Entity extends GameObject implements Drawable, Collidable {
 
-    // --- CAMPI COMUNI ---
     protected int x, y;
     protected Rectangle hitbox;
     protected Point spawnPoint;
     protected Random random = new Random();
 
-    // Movimento
     protected int speed;
     protected DirectionX xDirection = DirectionX.RIGHT;
     protected boolean moving;
     
-    // Fisica
     protected boolean jumping, falling, collisionFloor;
     protected float jumpSpeed, defaultJumpSpeed, fallSpeed;
     
-    // Stato
     protected boolean canDie;
     protected boolean attacking, positioning, dying;
     protected int attackTC;
     protected int positionTC;
     
-
-    // Campi interni per le collisioni
     protected int entityLeft, entityRight, entityTop, entityBottom;
     protected double entityLeftCol, entityRightCol, entityTopRow, entityBottomRow;
     protected boolean collisionX;
     
-    // --- DIPENDENZE COMUNI A TUTTE LE ENTITÀ ---
     protected final TilesManager tilesManager;
     protected final AudioManager audioManager;
     protected final ItemsManager itemsManager;
     
-    /**
-     * Costruttore base per ogni entità.
-     * Riceve le dipendenze fondamentali che verranno ereditate da tutte le sottoclassi.
-     */
+
     public Entity(TilesManager tilesManager, AudioManager audioManager, ItemsManager itemsManager) {
         this.tilesManager = tilesManager;
         this.audioManager = audioManager;
         this.itemsManager = itemsManager;
     }
-
-    // --- METODI DI LOGICA COMUNE IMPLEMENTATI QUI ---
-
     
     public abstract void update();
 
     protected abstract void positioningUpdate();
 
+    
     protected void moveToSpawnPoint() {
     	if (spawnPoint == null) return;
     	
@@ -74,8 +62,7 @@ public abstract class Entity extends GameObject implements Drawable, Collidable 
      	if (y < spawnPoint.y) y = Math.min(y + posSpeed, spawnPoint.y);
      	else if (y > spawnPoint.y) y = Math.max(y - posSpeed, spawnPoint.y);
  }
-    
-
+ 
 
     public boolean inSpawnPosition() {
         if (spawnPoint == null) return false;
@@ -218,8 +205,6 @@ public abstract class Entity extends GameObject implements Drawable, Collidable 
     public boolean isPositioning() { return positioning; }
     
     public void takePosition() { this.positioning = true; }
-    
-    // Drawable methods
     
     @Override
     public String getDirectionData() { return xDirection.toString(); }

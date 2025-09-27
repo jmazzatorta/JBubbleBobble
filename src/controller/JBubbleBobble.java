@@ -31,9 +31,6 @@ public class JBubbleBobble {
             GameFrame view = new GameFrame();
             GameController controller = new GameController(model, view);
             
-            
-
-            // --- 2. COLLEGAMENTO DEI COMPONENTI (WIRING) ---
 
             view.init(model, inputController);
 
@@ -41,10 +38,6 @@ public class JBubbleBobble {
             
             model.addGameStateListener(view);
             model.addGameStateListener(model.getAudioManager());
-
-
-
-            // --- 3. AVVIO DEL GIOCO ---
 
             controller.startGame();
         });

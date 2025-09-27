@@ -8,13 +8,7 @@ import javax.sound.sampled.*;
 import java.io.IOException;
 import java.net.URL;
 import java.util.EnumMap;
-import java.util.Stack;
 
-/**
- * Gestore audio rifattorizzato.
- * Pre-carica tutti i suoni all'avvio per efficienza.
- * Implementa GameStateListener per cambiare la musica in modo reattivo.
- */
 public class AudioManager implements GameStateListener {
 
     private final EnumMap<SoundEffects, Clip> clips;
@@ -43,14 +37,9 @@ public class AudioManager implements GameStateListener {
         }
     }
 
-    /**
-     * Riproduce un effetto sonoro breve.
-     * @param effect L'effetto da riprodurre.
-     */
     public void playSound(SoundEffects effect) {
         Clip clip = clips.get(effect);
         if (clip != null) {
-            // Se sta già suonando, lo ferma e lo fa ripartire dall'inizio
             if (clip.isRunning()) {
                 clip.stop();
             }
@@ -59,12 +48,8 @@ public class AudioManager implements GameStateListener {
         }
     }
 
-    /**
-     * Riproduce una traccia musicale in loop, fermando quella precedente.
-     * @param music La musica da riprodurre.
-     */
     public void playMusic(SoundEffects music) {
-        // Ferma la musica corrente se ce n'è una
+
         if (currentMusic != null && currentMusic.isRunning()) {
             currentMusic.stop();
         }
@@ -95,9 +80,4 @@ public class AudioManager implements GameStateListener {
         }
     }
 
-	@Override
-	public void onLevelChangeStart(Stack<int[]> nextLevelRows) {
-		// TODO Auto-generated method stub
-		
-	}
 }

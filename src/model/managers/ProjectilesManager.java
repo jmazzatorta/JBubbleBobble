@@ -22,8 +22,7 @@ public class ProjectilesManager extends BaseManager<Projectile> {
 
     @Override
     public void update() {
-        super.update(); // Aggiorna tutti i proiettili
-
+        super.update(); 
         for (Projectile projectile : entities) {
             if (projectile.isReadyToRemove()) {
                 remove(projectile); 
@@ -31,7 +30,6 @@ public class ProjectilesManager extends BaseManager<Projectile> {
         }
     }
 
-    // --- SPAWN PROIETTILI DA NEMICI ---
     public void spawnProjectileFromEnemy(Entity enemy) {
         if (enemy == null) return;
 
@@ -46,10 +44,9 @@ public class ProjectilesManager extends BaseManager<Projectile> {
                 break;
         }
 
-        if (projectile != null) add(projectile); // 🔥 notifica automatica
+        if (projectile != null) add(projectile); 
     }
 
-    // --- SPAWN PROIETTILI DA BUBBLES ---
     public void spawnProjectileFromBubble(SpecialBubble bubble) {
         if (bubble == null) return;
 
@@ -61,23 +58,20 @@ public class ProjectilesManager extends BaseManager<Projectile> {
             case "THUNDER" -> projectile = new Thunder(bubble.getX(), bubble.getY(), map);
         }
 
-        if (projectile != null) add(projectile); // 🔥 notifica automatica
+        if (projectile != null) add(projectile); 
     }
 
-    // --- SPAWN FIRE CHILD ---
     public void spawnFireChild(int x, int y, Fire root, DirectionX direction, int charges) {
         if (root == null || direction == null) return;
         FireChild fireChild = new FireChild(x, y, root, direction, charges, map, this);
-        add(fireChild); // 🔥 notifica automatica
+        add(fireChild); 
     }
 
-    // --- RESET ---
     @Override
     public void reset() {
-        super.reset(); // 🔥 notifica automatica clearing
+        super.reset(); 
     }
 
-    // --- GETTERS ---
     public List<Projectile> getProjectiles() {
         return getEntities();
     }

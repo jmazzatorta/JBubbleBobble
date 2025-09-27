@@ -37,7 +37,6 @@ public class GameOverPanel extends JPanel {
         String text = "game over";
         int width = g2.getFontMetrics().stringWidth(text);
         
-        // Centra il testo sullo schermo
         g2.drawString(text, (SCREENWIDTH / 2) - (width / 2), SCREENHEIGHT / 2);
         
         g2.dispose();

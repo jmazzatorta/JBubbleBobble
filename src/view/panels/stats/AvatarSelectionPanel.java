@@ -23,7 +23,6 @@ public class AvatarSelectionPanel extends JPanel {
         this.setDoubleBuffered(true);
     }
 
-    // Metodo per le animazioni (es. il rettangolo che lampeggia)
     public void update() {
         selectionTickCounter = (selectionTickCounter + 1) % 20;
     }
@@ -33,23 +32,20 @@ public class AvatarSelectionPanel extends JPanel {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
 
-        // --- Lettura dati dal View-Model (StatisticsManager) ---
+
         AvatarButton[] avatarButtons = statsManager.getAvatarButtons();
         AvatarButton selectedButton = statsManager.getSelectedButton();
 
-        // Disegna il testo
         g2.setColor(Color.WHITE);
         g2.setFont(font);
-        String text = "Choose your avatar!";
+        String text = "choose your avatar!";
         int width = g2.getFontMetrics().stringWidth(text);
         g2.drawString(text, (SCREENWIDTH / 2) - (width / 2), TILESIZE * 6);
 
-        // Disegna gli avatar
         for (AvatarButton button : avatarButtons) {
             g2.drawImage(avatars[button.getIndex()], button.getX(), button.getY(), null);
         }
         
-        // Disegna il rettangolo di selezione lampeggiante
         if (selectionTickCounter < 10) {
             g2.setStroke(new BasicStroke(3));
             g2.setColor(Color.YELLOW);

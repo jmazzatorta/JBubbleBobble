@@ -14,7 +14,6 @@ public class IntroStatsPanel extends JPanel {
     private final Font font70, font50;
     private final ArrayList<BufferedImage> charactersImages;
 
-    // Campi per le animazioni interne
     private int textTickCounter = 0;
     private int animationTickCounter = 0;
 
@@ -41,13 +40,11 @@ public class IntroStatsPanel extends JPanel {
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2.setColor(Color.WHITE);
 
-        // Disegna titolo
         g2.setFont(font70);
         String title = "create your user!";
         int titleWidth = g2.getFontMetrics().stringWidth(title);
         g2.drawString(title, (SCREENWIDTH / 2) - (titleWidth / 2), HALF_SCREENHEIGHT - TILESIZE * 2);
 
-        // Disegna testo "press enter" lampeggiante
         if (textTickCounter < 20) {
             g2.setFont(font50);
             String subtitle = "press enter to continue";
@@ -55,7 +52,6 @@ public class IntroStatsPanel extends JPanel {
             g2.drawString(subtitle, (SCREENWIDTH / 2) - (subtitleWidth / 2), HALF_SCREENHEIGHT + TILESIZE * 2);
         }
         
-        // Disegna il giocatore corrente che si sta per creare
         StatisticsManager.CurrentPlayer playerEnum = statsManager.getCurrentPlayer();
         String playerText = "";
         int charImgIndex = 0;
@@ -65,7 +61,7 @@ public class IntroStatsPanel extends JPanel {
             playerText = "P1";
             charImgIndex = 0;
         } else {
-            g2.setColor(Color.ORANGE); // Colore diverso per P2
+            g2.setColor(Color.ORANGE); 
             playerText = "P2";
             charImgIndex = 2;
         }
@@ -73,7 +69,6 @@ public class IntroStatsPanel extends JPanel {
         g2.setFont(font70);
         g2.drawString(playerText, HALF_SCREENWIDTH + TILESIZE, HALF_SCREENHEIGHT + TILESIZE * 8);
         
-        // Animazione del personaggio
         int animationFrame = (animationTickCounter < 10) ? 0 : 1;
         g2.drawImage(charactersImages.get(charImgIndex + animationFrame), HALF_SCREENWIDTH - TILESIZE * 4, HALF_SCREENHEIGHT + TILESIZE * 6, null);
 

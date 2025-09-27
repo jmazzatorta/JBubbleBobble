@@ -82,7 +82,6 @@ public class Fire extends Projectile {
         projectilesManager.spawnFireChild(childX, y, root, childDirection, parentCharges - 1);
     }
 
-    // Drawable methods
     public String getTypeData() { return "FIRE"; }
     public String getActionData() { return null; }
     public String getDirectionData() { return null; }

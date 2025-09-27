@@ -1,9 +1,5 @@
 package model;
 
-/**
- * Un catalogo di tutti i file audio del gioco.
- * Questa enum ora contiene solo il percorso della risorsa, senza logica di riproduzione.
- */
 public enum SoundEffects {
     MAIN_THEME("/audio/maintheme.wav"),
     GAMEOVER_THEME("/audio/gameover.wav"),
@@ -13,7 +9,7 @@ public enum SoundEffects {
     ITEM("/audio/itemcollision.wav"),
     BUBBLE("/audio/bubble.wav"),
     DEATH("/audio/dying.wav"),
-    ENEMY_DEATH("/audio/enemydying1.wav"); // Semplificato per l'esempio
+    ENEMY_DEATH("/audio/enemydying1.wav"); 
 
     private final String filePath;
 

@@ -12,11 +12,6 @@ import model.managers.ScoreManager;
 import view.utils.FontTool;
 import view.utils.ImageLoader;
 
-/**
- * Gestisce il disegno dell'interfaccia utente (punteggi, vite, etc.) (rifattorizzata).
- * Ora è un componente "stateless" che legge i dati direttamente dal GameModel
- * al momento del disegno.
- */
 public class GUI {
 
     private final GameModel model;
@@ -24,19 +19,12 @@ public class GUI {
     private final BufferedImage bubLife;
     private final BufferedImage bobLife;
 
-    // Stato interno solo per l'animazione "insert coin"
     private long insertCoinTimer = 0;
     private boolean showInsertCoin = true;
 
-    /**
-     * Il costruttore ora riceve il GameModel come unica fonte di verità
-     * e si occupa di caricare tutte le risorse necessarie.
-     * @param model Il GameModel dell'applicazione.
-     */
     public GUI(GameModel model) {
         this.model = model;
         
-        // Carica le risorse (font e immagini)
         this.font = FontTool.loadFont("font1.ttf", 80f);
         this.bubLife = loadLifeImage("bublife");
         this.bobLife = loadLifeImage("boblife");
@@ -44,30 +32,20 @@ public class GUI {
         this.insertCoinTimer = System.currentTimeMillis();
     }
     
-    // Metodo helper per caricare le immagini delle vite
     private BufferedImage loadLifeImage(String imageName) {
         ImageLoader.setScaling(1);
         ImageLoader.setPath("/player/");
         return ImageLoader.load(imageName);
     }
 
-    /**
-     * Aggiorna la logica interna della GUI (solo l'animazione "insert coin").
-     */
     public void update() {
-        // Logica per far lampeggiare "insert coin" ogni secondo
         if (System.currentTimeMillis() - insertCoinTimer > 1000) {
             showInsertCoin = !showInsertCoin;
             insertCoinTimer = System.currentTimeMillis();
         }
     }
 
-    /**
-     * Disegna l'intera interfaccia utente.
-     * I dati vengono letti FRESCHI dal model ad ogni chiamata.
-     */
     public void draw(Graphics2D g2) {
-        // --- Lettura dati aggiornati dal Model ---
         Player p1 = model.getPlayersManager().getP1();
         Player p2 = model.getPlayersManager().getP2();
         
@@ -79,7 +57,6 @@ public class GUI {
         
         int maxScore = ScoreManager.getHighestScore();
 
-        // --- Disegno ---
         drawTexts(g2, scoreP1, scoreP2, maxScore);
         drawLives(g2, livesP1, livesP2);
     }

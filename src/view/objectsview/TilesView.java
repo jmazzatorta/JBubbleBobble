@@ -25,13 +25,8 @@ public class TilesView {
     
     private static final int SHADOW_OFFSET = TILESIZE/2;
 
-    /**
-     * Il costruttore riceve il provider della mappa (il TilesManager del Model)
-     * e carica le risorse grafiche.
-     * @param mapProvider L'oggetto del Model che fornisce i dati della mappa.
-     */
     public TilesView(DrawableMap mapProvider) {
-        this.mapProvider = mapProvider; // Memorizza il riferimento al manager del model
+        this.mapProvider = mapProvider; 
         this.map = mapProvider.getMap();
         this.tilesImages = new ArrayList<>();
         this.borderImages = new ArrayList<>();
@@ -41,7 +36,7 @@ public class TilesView {
     }
     
     private void loadSideColors() {
-        sideColors[0] = Color.BLACK; // Default
+        sideColors[0] = Color.BLACK; 
         sideColors[1] = new Color(205, 123, 205);
         sideColors[2] = new Color(99, 0, 0);
         sideColors[3] = sideColors[2]; 
@@ -52,10 +47,6 @@ public class TilesView {
         sideColors[8] = new Color(130, 130, 130);
     }
 
-    /**
-     * Contiene solo la logica di disegno.
-     * Sceglie se disegnare la mappa statica del Model o quella animata.
-     */
     public void draw(Graphics2D g2) {
         if (map == null) return;
         
@@ -84,7 +75,6 @@ public class TilesView {
                 y = row * TILESIZE + currentYOffset;
                 side = (col == 0) ? TILESIZE * 2 : TILESIZE;
                 
-                // Riempi gli array con le coordinate correnti
                 polyXPoints[0] = x; polyXPoints[1] = x + SHADOW_OFFSET; polyXPoints[2] = x + side + SHADOW_OFFSET; polyXPoints[3] = x + side + SHADOW_OFFSET; polyXPoints[4] = x + side;
                 polyYPoints[0] = y + side; polyYPoints[1] = y + side + SHADOW_OFFSET; polyYPoints[2] = y + side + SHADOW_OFFSET; polyYPoints[3] = y + SHADOW_OFFSET; polyYPoints[4] = y;
                 
@@ -96,7 +86,6 @@ public class TilesView {
         }
     }
 
-    // --- METODI HELPER (INVARIATI) ---
     private void loadImages() {
         ArrayList<String> imageNames = new ArrayList<>();
         ImageLoader.setPath("/tiles/");

@@ -69,17 +69,15 @@ public class PlayingPanel extends JPanel {
         g2.setColor(Color.BLACK);
         g2.fillRect(0, 0, getWidth(), getHeight());
         
-        // 1. Disegna la mappa
+
         tilesView.draw(g2);
-        // 2. Disegna tutte le entità dinamiche
+
         for (DrawableWrapper wrapper : drawableEntities.values()) {
             drawEntity(g2, wrapper);
         }
-        
-        // 3. Disegna gli effetti speciali
+
         vfxManager.draw(g2);
-        
-        // 4. Disegna l'interfaccia utente
+
         gui.draw(g2);
         
         g2.dispose();
@@ -95,7 +93,7 @@ public class PlayingPanel extends JPanel {
         else if (entity instanceof model.projectiles.Projectile) projectilesView.draw(g2, wrapper);
     }
     
-    // --- Metodi dei Listener (inoltrati da GameFrame) ---
+
 
     public void onEntityAdded(Updatable entity) {
     	if (entity instanceof Drawable) {
@@ -110,8 +108,5 @@ public class PlayingPanel extends JPanel {
     public void onMinorEvent(MinorEvent event) {
         vfxManager.addEvent(event);
     }
-    
-    //public void onLevelChangeStart(Stack<int[]> nextLevelRows) {
-    //    tilesView.startLevelTransition(nextLevelRows);
-    //}
+
 }

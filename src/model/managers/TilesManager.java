@@ -13,7 +13,6 @@ public class TilesManager implements DrawableMap {
     private final int[][] map = new int[MAXSCREENROW][MAXSCREENCOL];
     private final Stack<int[]> nextLevelRows = new Stack<>();
     
-    // Variabili per lo scorrimento
     private boolean isSliding = false;
     private int slidedRows = 0;
     private int yOffset = 0;		
@@ -21,14 +20,9 @@ public class TilesManager implements DrawableMap {
 	
 	private final int SLIDE_SPEED = TILESIZE / 6;
 
-    /**
-     * Carica un livello da file e prepara lo stack per lo scroll animation.
-     * @param levelNumber numero del livello da caricare
-     */
     public void loadLevel(int levelNumber) {
         String path = "/maps/level" + levelNumber + ".txt";
 
-        // Pulisce lo stack precedente
         nextLevelRows.clear();
 
         InputStream is = getClass().getResourceAsStream(path);
@@ -101,8 +95,6 @@ public class TilesManager implements DrawableMap {
     public void slideToNextLevel() {
     	isSliding = true;
     }
-
-    // --- DrawableMap interface ---
 
     @Override
     public int[][] getMap() {

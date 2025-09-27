@@ -8,8 +8,8 @@ public class Thunder extends Projectile {
 
     public Thunder(int x, int y, int[][] tileMap) {
         super(x, y, x < SCREENWIDTH / 2 ? DirectionX.RIGHT : DirectionX.LEFT, tileMap);
-        this.speed = 6; // Velocità personalizzabile
-        this.hitbox = new Rectangle(0, 0, TILESIZE / 2, TILESIZE); // hitbox valida per collisioni
+        this.speed = 6; 
+        this.hitbox = new Rectangle(0, 0, TILESIZE / 2, TILESIZE); 
     }
 
     @Override

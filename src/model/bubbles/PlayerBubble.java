@@ -160,7 +160,6 @@ public class PlayerBubble extends Bubble {
         super.pop(null);
     }
 
-    // --- View ---
     public String getTypeData() { return owner.getName(); }
     public String getActionData() { 
     	if (projectile) return "PROJECTILE";

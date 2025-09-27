@@ -47,14 +47,12 @@ public class LevelManager {
         this.state = state;
     }
 
-    // --- Dependency injection setters ---
     public void setEnemiesManager(EnemiesManager enemies) { this.enemies = enemies; }
     public void setItemsManager(ItemsManager items) { this.items = items; }
     public void setPlayersManager(PlayersManager players) { this.players = players; }
     public void setBubblesManager(BubblesManager bubbles) { this.bubbles = bubbles; }
     public void setGameModel(GameModel gameModel) { this.gameModel = gameModel; }
     
-    // --- Inizializzazione primo livello ---
     public void initFirstLevel() {
     	
     	players.reset();
@@ -74,10 +72,9 @@ public class LevelManager {
     }
 
     private void loadLevelAndPrepareStack(int levelNumber) {
-        tiles.loadLevel(levelNumber); // lo stack viene popolato solo qui
+        tiles.loadLevel(levelNumber);
     }
 
-    // --- Update ciclo di gioco ---
     public void update() {
         if (initialisingLevel) {
             initialisingUpdate();
@@ -104,7 +101,6 @@ public class LevelManager {
     private void playingUpdate() {
         if (!players.playersAlive()) {
             state.setState(GameStates.GAMEOVER);
-            //sound
             
             endLevel();
             return;
@@ -163,7 +159,6 @@ public class LevelManager {
         }
     }
 
-    // --- Fine livello ---
     public void endLevel() {
         items.reset();
         items.blockFactory();
@@ -189,7 +184,6 @@ public class LevelManager {
         }
     }
 
-    // --- Passaggio al livello successivo ---
     public void nextLevel() {
         currentLevel++;
         loadLevelAndPrepareStack(currentLevel);
@@ -202,7 +196,6 @@ public class LevelManager {
         angryEnemies = false;
         angryEnemiesTC = 30 * FPS;
 
-        // Creazione nemici e impostazione special bubble per ogni livello
         switch (currentLevel) {
             case 2:
                 enemies.createEnemy("Zenchan", 14, 5);

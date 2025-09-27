@@ -81,12 +81,6 @@ public class GameModel {
         this.gameStateListeners.add(listener);
     }
     
-    public void notifyLevelChangeStart(java.util.Stack<int[]> nextLevelRows) {
-        for (GameStateListener listener : gameStateListeners) {
-            listener.onLevelChangeStart(nextLevelRows);
-        }
-    }
-    
     public void notifyGameStateChanged(model.states.GameStates newState) {
         for (GameStateListener listener : gameStateListeners) {
             listener.onGameStateChanged(newState);
@@ -109,7 +103,6 @@ public class GameModel {
     public SavingsManager getSavingsManager() { return savingsManager; }
     
 
-    // --- CLASSE BUILDER AGGIORNATA ---
     public static class GameModelBuilder {
     
         private StateManager stateManager;

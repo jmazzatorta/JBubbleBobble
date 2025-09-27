@@ -36,12 +36,6 @@ public class PlayersView {
         loadImages();
     }
 
-    /**
-     * --- DRAW ---
-     * Riceve da PlayingPanel il wrapper specifico del giocatore da disegnare.
-     * @param g2 il contesto grafico su cui disegnare.
-     * @param wrapper il wrapper che contiene il giocatore e il suo stato di animazione.
-     */
     public void draw(Graphics2D g2, DrawableWrapper wrapper) {
     	Drawable player = wrapper.getDrawable();
     	
@@ -56,7 +50,6 @@ public class PlayersView {
         }
     }
     
-    // Un record per contenere le informazioni sullo sprite da disegnare.
     private record SpriteInfo(BufferedImage image, int xOffset, int yOffset) {}
 
 
@@ -65,6 +58,7 @@ public class PlayersView {
     	
         String direction = player.getDirectionData();
         String action = player.getActionData();
+        if ("DEAD".equals(action)) return null;
         boolean isBub = player.getTypeData().equalsIgnoreCase("bub"); 
 
         ArrayList<BufferedImage> images = null;
@@ -114,8 +108,6 @@ public class PlayersView {
         
         return new SpriteInfo(images.get(frameIndex), xOffset, yOffset);
     }
-
-    // --- METODI PER IL CARICAMENTO DELLE IMMAGINI (INVARIATI) ---
 
     private void loadImages() {
         ArrayList<String> imageNames = new ArrayList<>();

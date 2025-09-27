@@ -12,17 +12,13 @@ import view.utils.ImageLoader;
 
 public class ProjectilesView {
 
-    // I campi per gli sprite, ora 'final'.
     private final ArrayList<BufferedImage> maitaImages;
     private final ArrayList<BufferedImage> maitaCrashImages;
     private final ArrayList<BufferedImage> thunderImages;
     private final ArrayList<BufferedImage> fireImages;
 
-    /**
-     * Il costruttore pubblico carica tutte le immagini necessarie all'avvio.
-     */
     public ProjectilesView() {
-        // Inizializza le liste
+
         this.maitaImages = new ArrayList<>();
         this.maitaCrashImages = new ArrayList<>();
         this.thunderImages = new ArrayList<>();
@@ -30,11 +26,6 @@ public class ProjectilesView {
         loadImages();
     }
 
-    /**
-     * Disegna un singolo proiettile, ricevendo il wrapper da PlayingPanel.
-     * @param g2 il contesto grafico su cui disegnare.
-     * @param wrapper il wrapper che contiene il proiettile e il suo stato.
-     */
     public void draw(Graphics2D g2, DrawableWrapper wrapper) {
     	Drawable projectile = wrapper.getDrawable();
     	
@@ -44,9 +35,6 @@ public class ProjectilesView {
         }
     }
 
-    /**
-     * Seleziona lo sprite corretto da disegnare in base al tipo e azione del proiettile.
-     */
     private BufferedImage getSprite(DrawableWrapper wrapper) {
     	Drawable projectile = wrapper.getDrawable();
     	
@@ -67,7 +55,6 @@ public class ProjectilesView {
         return images.get(wrapper.getCurrentFrame() % images.size());
     }
 
-    // --- METODI PER IL CARICAMENTO DELLE IMMAGINI (INVARIATI) ---
 
     private void loadImages() {
         ArrayList<String> imageNames = new ArrayList<>();

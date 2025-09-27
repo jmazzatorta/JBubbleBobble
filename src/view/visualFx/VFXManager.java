@@ -9,62 +9,40 @@ import static constants.Constants.*;
 import model.utils.MinorEvent;
 import view.utils.ImageLoader;
 
-/**
- * Gestisce la creazione, l'aggiornamento e il disegno degli effetti visivi (VFX).
- * Non è più un Singleton. Ora ha metodi separati per 'update' e 'draw'
- * e riceve gli eventi da creare tramite un metodo pubblico 'addEvent'.
- */
 public class VFXManager {
 
-    // I campi per gli sprite, ora 'final' per una maggiore robustezza.
     private final ArrayList<BufferedImage> bubImages;
     private final ArrayList<BufferedImage> bobImages;
     private final ArrayList<BufferedImage> powImages;
     private final ArrayList<BufferedImage> dynamiteImages;
     
-    // La coda per gli eventi in arrivo e l'array (pool) per gli effetti attivi.
     private final List<MinorEvent> eventQueue;
     private final VisualFx[] activeFx;
 
-    /**
-     * Il costruttore pubblico carica le immagini e inizializza le strutture dati.
-     */
     public VFXManager() {
-        // Inizializza le liste di immagini
+
         this.bubImages = new ArrayList<>();
         this.bobImages = new ArrayList<>();
         this.powImages = new ArrayList<>();
         this.dynamiteImages = new ArrayList<>();
         
-        // Inizializza le strutture dati per gli effetti
         this.eventQueue = new ArrayList<>();
         this.activeFx = new VisualFx[MAX_VFX];
 
         loadImages();
     }
 
-    /**
-     * Metodo pubblico chiamato da un gestore esterno (es. PlayingPanel)
-     * per richiedere la creazione di un nuovo effetto visivo.
-     * @param event L'evento del modello che descrive l'effetto da creare.
-     */
     public void addEvent(MinorEvent event) {
         eventQueue.add(event);
     }
     
-    /**
-     * Aggiorna lo stato di tutti gli effetti.
-     * 1. Crea nuovi effetti basandosi sugli eventi in coda.
-     * 2. Aggiorna il ciclo di vita di tutti gli effetti già attivi.
-     */
     public void update() {
-        // Processa gli eventi in coda per creare nuovi effetti
+
         for (MinorEvent event : eventQueue) {
             generateFx(event);
         }
-        eventQueue.clear(); // Svuota la coda dopo averla processata
+        eventQueue.clear(); 
 
-        // Aggiorna tutti gli effetti visivi attivi e rimuove quelli "morti"
         for (int i = 0; i < activeFx.length; i++) {
             if (activeFx[i] != null) {
                 activeFx[i].update();
@@ -75,10 +53,6 @@ public class VFXManager {
         }
     }
 
-    /**
-     * Disegna tutti gli effetti visivi attivi.
-     * @param g2 Il contesto grafico su cui disegnare.
-     */
     public void draw(Graphics2D g2) {
         for (VisualFx vfx : activeFx) {
             if (vfx != null) {
@@ -87,12 +61,9 @@ public class VFXManager {
         }
     }
 
-    /**
-     * Metodo privato che smista un evento al corretto costruttore di effetti.
-     */
     private void generateFx(MinorEvent event) {
         int freeSlot = findEmptySlot();
-        if (freeSlot == -1) return; // Pool di effetti pieno, non ne crea di nuovi
+        if (freeSlot == -1) return; 
 
         switch (event.getType()) {
             case "SCORE"    -> activeFx[freeSlot] = generateScoreFx(event, freeSlot);
@@ -120,7 +91,6 @@ public class VFXManager {
 
         if (imageListIdx == -1) return null;
 
-        // Determina se usare gli sprite di Bub o Bob in base al nome utente
         List<BufferedImage> imageList = "bub".equalsIgnoreCase(event.getUser()) ? bubImages : bobImages;
         BufferedImage image = imageList.get(imageListIdx);
         

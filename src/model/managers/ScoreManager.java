@@ -15,15 +15,12 @@ public class ScoreManager {
 	public void addScore(int delta) {
 		this.score += delta;
 		
-		// Questo blocco aggiorna il punteggio massimo in modo thread-safe.
 		int currentHighest;
 		do {
 			currentHighest = highestScore.get();
 			if (this.score <= currentHighest) {
-				break; // Il nostro punteggio non è più alto, usciamo.
+				break; 
 			}
-			// Altrimenti, tentiamo di impostare il nostro punteggio come nuovo record.
-			// compareAndSet ha successo solo se il valore non è cambiato nel frattempo.
 		} while (!highestScore.compareAndSet(currentHighest, this.score));
 	}
 	
@@ -35,7 +32,6 @@ public class ScoreManager {
 		return score;
 	}
 	
-	// --- Metodi per l'highest score  ---
 	
 	public static int getHighestScore() {
 		return highestScore.get();
